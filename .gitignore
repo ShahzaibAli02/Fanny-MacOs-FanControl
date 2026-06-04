@@ -1,0 +1,10 @@
+# Build Products
+*.app
+/Fan Control.app/
+/smc-helper
+/FanControl
+/temp_test
+
+# OS Files
+.DS_Store
+Thumbs.db
