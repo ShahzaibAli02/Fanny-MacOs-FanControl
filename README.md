@@ -2,7 +2,11 @@
 
 A sleek, native SwiftUI macOS application designed for real-time monitoring and manual/automated control of MacBook fan speeds. Compatible with both Intel and Apple Silicon (M1/M2/M3/M4/M5+) architectures.
 
-![macOS Fan Control Center Dashboard](screenshot.png)
+<p align="center">
+  <img src="screenshot.png" width="32%" alt="Main dashboard" />
+  <img src="screenshoot1.png" width="32%" alt="Dashboard with temperature history" />
+  <img src="screnshoot2.png" width="32%" alt="Rules engine and setup details" />
+</p>
 
 It features a dual-component design: a sandboxed SwiftUI GUI front-end that communicates with a privileged command-line helper (`smc-helper`) to securely read and write System Management Controller (SMC) registers.
 

@@ -7,6 +7,9 @@ class FanViewModel: ObservableObject {
     @Published var cpuTemp: Double? = nil
     @Published var gpuTemp: Double? = nil
     @Published var batteryTemp: Double? = nil
+    @Published var tempHistory: [TempRecord] = []
+    
+    private var lastHistoryRecordTime: Date? = nil
     
     @Published var isAuthorized: Bool = false
     @Published var linkedFans: Bool = false
@@ -44,6 +47,7 @@ class FanViewModel: ObservableObject {
     init() {
         checkAuthorization()
         loadRules()
+        loadHistory()
         startPolling()
     }
     
@@ -134,6 +138,7 @@ class FanViewModel: ObservableObject {
                     self.batteryTemp = decoded.batteryTemp
                     self.isPollingActive = true
                     self.evaluateRules()
+                    self.recordHistoryIfNeeded()
                 }
             }
         } catch {
@@ -272,6 +277,45 @@ class FanViewModel: ObservableObject {
         case .cpu: return cpuTemp
         case .gpu: return gpuTemp
         case .battery: return batteryTemp
+        }
+    }
+    
+    // MARK: - Temperature History Management
+    private func recordHistoryIfNeeded() {
+        let now = Date()
+        
+        // Ensure we have at least one valid reading
+        guard cpuTemp != nil || gpuTemp != nil || batteryTemp != nil else { return }
+        
+        if let lastTime = lastHistoryRecordTime {
+            // Only record every 30 seconds to avoid bloating
+            guard now.timeIntervalSince(lastTime) >= 30.0 else { return }
+        }
+        
+        let record = TempRecord(timestamp: now, cpu: cpuTemp, gpu: gpuTemp, battery: batteryTemp)
+        tempHistory.append(record)
+        lastHistoryRecordTime = now
+        
+        pruneHistory()
+        saveHistory()
+    }
+    
+    private func pruneHistory() {
+        let cutoff = Date().addingTimeInterval(-12 * 3600) // 12 hours ago
+        tempHistory.removeAll { $0.timestamp < cutoff }
+    }
+    
+    private func saveHistory() {
+        if let encoded = try? JSONEncoder().encode(tempHistory) {
+            UserDefaults.standard.set(encoded, forKey: "tempHistory")
+        }
+    }
+    
+    private func loadHistory() {
+        if let data = UserDefaults.standard.data(forKey: "tempHistory"),
+           let decoded = try? JSONDecoder().decode([TempRecord].self, from: data) {
+            self.tempHistory = decoded
+            self.lastHistoryRecordTime = decoded.last?.timestamp
         }
     }
 }

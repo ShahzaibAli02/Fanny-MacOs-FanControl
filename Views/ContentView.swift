@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Main Content View
 struct ContentView: View {
     @ObservedObject var viewModel: FanViewModel
+    @State private var selectedSensor: TriggerRule.SensorType? = nil
     
     var body: some View {
         VStack(spacing: 0) {
@@ -55,12 +56,100 @@ struct ContentView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     // Temperature Sensors Row
-                    HStack(spacing: 16) {
-                        TempMetricCard(title: "Battery", temp: viewModel.batteryTemp, iconName: "battery.100.bolt", iconColor: .green)
-                        TempMetricCard(title: "CPU Die", temp: viewModel.cpuTemp, iconName: "cpu", iconColor: .orange)
-                        TempMetricCard(title: "GPU proximity", temp: viewModel.gpuTemp, iconName: "gauge.with.needle", iconColor: .purple)
+                    HStack(spacing: 10) {
+                        TempMetricCard(
+                            title: "Battery",
+                            temp: viewModel.batteryTemp,
+                            iconName: "battery.100.bolt",
+                            iconColor: .green,
+                            isSelected: selectedSensor == .battery
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                if selectedSensor == .battery {
+                                    selectedSensor = nil
+                                } else {
+                                    selectedSensor = .battery
+                                }
+                            }
+                        }
+                        .onHover { inside in
+                            if inside {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                        .help("Click to toggle battery temperature history")
+                        
+                        TempMetricCard(
+                            title: "CPU Die",
+                            temp: viewModel.cpuTemp,
+                            iconName: "cpu",
+                            iconColor: .orange,
+                            isSelected: selectedSensor == .cpu
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                if selectedSensor == .cpu {
+                                    selectedSensor = nil
+                                } else {
+                                    selectedSensor = .cpu
+                                }
+                            }
+                        }
+                        .onHover { inside in
+                            if inside {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                        .help("Click to toggle CPU temperature history")
+                        
+                        TempMetricCard(
+                            title: "GPU proximity",
+                            temp: viewModel.gpuTemp,
+                            iconName: "gauge.with.needle",
+                            iconColor: .purple,
+                            isSelected: selectedSensor == .gpu
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                if selectedSensor == .gpu {
+                                    selectedSensor = nil
+                                } else {
+                                    selectedSensor = .gpu
+                                }
+                            }
+                        }
+                        .onHover { inside in
+                            if inside {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                        .help("Click to toggle GPU temperature history")
                     }
                     .padding(.horizontal, 24)
+                    
+                    if let sensor = selectedSensor {
+                        TempHistoryChartView(
+                            sensor: sensor,
+                            history: viewModel.tempHistory,
+                            onClose: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    selectedSensor = nil
+                                }
+                            }
+                        )
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.horizontal, 24)
+                    }
                     
                     // Privilege setup card if helper not authorized
                     if !viewModel.isAuthorized {

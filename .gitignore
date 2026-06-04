@@ -8,3 +8,6 @@
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Installers / Packages
+*.dmg
