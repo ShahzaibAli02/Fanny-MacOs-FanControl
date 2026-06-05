@@ -64,6 +64,12 @@ chmod +x build.sh
 
 This compiles `smc-helper` and `FanControl`, drafts the app metadata (`Info.plist`), and processes the visual assets to output a standard application bundle: **`Fan Control.app`**.
 
+By default, the build script pins the app and helper binaries to macOS 13.0 and creates a Universal 2 bundle for both Intel and Apple Silicon Macs. You can override those defaults when needed:
+
+```bash
+MACOS_DEPLOYMENT_TARGET=14.0 ARCHS="arm64" ./build.sh
+```
+
 ---
 
 ## 🚀 How to Run the App
@@ -102,4 +108,3 @@ To return your fans to macOS automatic controller management:
 ## 📄 License
 
 This project is open-source software licensed under the [MIT License](LICENSE).
-
