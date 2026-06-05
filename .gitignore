@@ -1,4 +1,5 @@
 # Build Products
+.build/
 *.app
 /Fan Control.app/
 /smc-helper
