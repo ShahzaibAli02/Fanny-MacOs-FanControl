@@ -96,7 +96,11 @@ class FanViewModel: ObservableObject {
         
         if let err = error {
             let desc = err[NSAppleScript.errorMessage] as? String ?? "Authorization rejected or failed."
-            self.errorMessage = desc
+            if desc.contains("Read-only file system") {
+                self.errorMessage = "Please move Fan Control to your Applications folder before authorizing. The helper tool cannot be configured on a read-only disk image."
+            } else {
+                self.errorMessage = desc
+            }
             self.isAuthorized = false
         } else {
             self.errorMessage = nil
