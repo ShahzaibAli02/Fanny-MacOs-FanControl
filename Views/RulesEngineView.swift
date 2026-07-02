@@ -207,6 +207,22 @@ struct RuleRowView: View {
                     }
                 }
             }
+
+            // Battery-awareness toggle
+            HStack(spacing: 12) {
+                Spacer().frame(width: 48)
+                Image(systemName: "battery.75")
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
+                Text("Reduce speed 25% on battery")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                Spacer()
+                Toggle("", isOn: $rule.reduceOnBattery)
+                    .toggleStyle(SwitchToggleStyle(tint: .green))
+                    .labelsHidden()
+                    .scaleEffect(0.75)
+            }
         }
         .padding(12)
         .background(Color.white.opacity(0.02))

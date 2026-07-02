@@ -30,7 +30,21 @@ struct ContentView: View {
                 }
                 
                 Spacer()
-                
+
+                // Power Source Badge
+                HStack(spacing: 6) {
+                    Image(systemName: viewModel.isOnACPower ? "powerplug.fill" : "battery.75")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(viewModel.isOnACPower ? "AC Power" : "On Battery")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundColor(viewModel.isOnACPower ? .teal : .green)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.04))
+                .cornerRadius(20)
+                .help(viewModel.isOnACPower ? "Rules run at full speed" : "Rules with battery-saving enabled run at reduced speed")
+
                 // Status Badge
                 if !viewModel.isAuthorized {
                     HStack(spacing: 6) {
@@ -170,7 +184,7 @@ struct ContentView: View {
                                         .font(.system(size: 16, weight: .bold))
                                         .foregroundColor(.white)
                                     
-                                    Text("SMC (System Management Controller) fan modification requires root privileges. A local helper tool is bundled to perform these actions safely. Click below to authorize it (requires administrator password once).")
+                                    Text("SMC (System Management Controller) fan modification requires root privileges. A bundled helper daemon performs these actions safely over an authenticated XPC connection. Click below to install it — you may need to approve it once under System Settings ▸ Login Items.")
                                         .font(.system(size: 13))
                                         .foregroundColor(.gray)
                                         .lineSpacing(4)
@@ -259,6 +273,21 @@ struct ContentView: View {
                         .padding(.horizontal, 24)
                     }
                     
+                    // Fan-operation errors (e.g. an SMC unlock failure) used to be
+                    // swallowed here once authorized, since the only error display
+                    // lived inside the "Authorization Required" card above, which
+                    // stops rendering once isAuthorized is true.
+                    if viewModel.isAuthorized, let error = viewModel.errorMessage {
+                        Text(error)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.red)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(6)
+                            .padding(.horizontal, 24)
+                    }
+
                     // Fans List
                     if viewModel.fans.isEmpty {
                         VStack(spacing: 16) {
@@ -284,7 +313,7 @@ struct ContentView: View {
                 .padding(.vertical, 20)
             }
         }
-        .frame(width: 580, height: 680)
+        .frame(minWidth: 480, idealWidth: 580, maxWidth: .infinity, minHeight: 520, idealHeight: 680, maxHeight: .infinity)
         .background(Color(red: 0.08, green: 0.08, blue: 0.1))
         .background(WindowAccessor { window in
             window.delegate = MainWindowDelegate.shared

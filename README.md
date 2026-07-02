@@ -9,7 +9,7 @@ A sleek, native SwiftUI macOS application designed for real-time monitoring and 
 ![Rules engine and setup details](screnshoot2.png)
 
 
-It features a dual-component design: a sandboxed SwiftUI GUI front-end that communicates with a privileged command-line helper (`smc-helper`) to securely read and write System Management Controller (SMC) registers.
+It features a dual-component design: a SwiftUI GUI front-end that communicates over **XPC** with a privileged, launchd-managed helper daemon (`smc-helper`) to write System Management Controller (SMC) registers. The daemon is installed via `SMAppService` (macOS 13+) and authenticates every connection by the client's code signature (our Team ID + the app's bundle identifier) before doing any work — there is no setuid binary and nothing that mutates the app's code signature. Sensor/state *reads* don't require privilege and run directly in the app process.
 
 ---
 
@@ -39,7 +39,8 @@ The codebase is organized into clean, single-responsibility files conforming to 
   - `RulesEngineView.swift`: Dynamic rules addition board.
   - `ContentView.swift`: Window layout coordinator.
 - 📂 **`App/`**: Application Entry Scene (`FanControlApp.swift`) coordinating regular activation and system Menu Bar Extra tray access.
-- 📂 **`Helper/`**: Privilege operations wrapper (`main.swift`) serving as a setuid execution client.
+- 📂 **`Shared/`**: The XPC interface (`FanControlHelperProtocol.swift`) and well-known service names, compiled into both the app and the helper.
+- 📂 **`Helper/`**: The privileged helper (`main.swift`) — an `NSXPCListener` root daemon that validates each client's code signature and performs the SMC writes.
 
 ---
 
@@ -70,6 +71,14 @@ By default, the build script pins the app and helper binaries to macOS 13.0 and 
 MACOS_DEPLOYMENT_TARGET=14.0 ARCHS="arm64" ./build.sh
 ```
 
+> **Signing (required for the helper to work).** The privileged helper is installed as a launchd daemon via `SMAppService`, and both `SMAppService` registration and the app↔daemon XPC code-signature checks require a real **Developer ID** identity. Pass yours via `SIGNING_IDENTITY`:
+>
+> ```bash
+> SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./build.sh
+> ```
+>
+> The default ad-hoc identity (`-`) compiles and launches the app, but macOS will refuse to register the daemon, so fan *writes* won't work.
+
 ---
 
 ## 🚀 How to Run the App
@@ -81,17 +90,15 @@ MACOS_DEPLOYMENT_TARGET=14.0 ARCHS="arm64" ./build.sh
    open "Fan Control.app"
    ```
 
-2. **Configure Privilege Setup (Required Once)**:
-   Writing custom values to the SMC requires administrative permission. On the first launch, follow these steps to configure access:
+2. **Install the Privileged Helper (Required Once)**:
+   Writing custom values to the SMC requires root. Instead of a setuid binary, the app installs a launchd-managed helper daemon the first time you enable adjustments:
+   - Move **Fan Control.app** to `/Applications` (SMAppService won't register a daemon from a read-only disk image).
    - Click the orange **"Authorize & Enable Fan Adjustments"** button in the app window.
-   - Enter your macOS administrator password when prompted.
+   - If macOS asks, approve **Fan Control** under **System Settings ▸ General ▸ Login Items** (the app opens this pane for you). The daemon appears under "Allow in the Background."
 
-   _Alternatively, you can manually set the privileged helper permissions using the command-line:_
+   No administrator password or `chmod +s` is involved — the daemon is registered by macOS and only accepts connections from this signed app.
 
-   ```bash
-   sudo chown root:wheel "Fan Control.app/Contents/MacOS/smc-helper"
-   sudo chmod +s "Fan Control.app/Contents/MacOS/smc-helper"
-   ```
+   To fully remove it later, use **System Settings ▸ General ▸ Login Items**, or programmatically via `SMAppService.daemon(...).unregister()`.
 
 ---
 

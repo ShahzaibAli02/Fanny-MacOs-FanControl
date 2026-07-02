@@ -166,7 +166,7 @@ public class SMC {
         let device: io_object_t
 
         let matchingDictionary: CFMutableDictionary = IOServiceMatching("AppleSMC")
-        result = IOServiceGetMatchingServices(kIOMasterPortDefault, matchingDictionary, &iterator)
+        result = IOServiceGetMatchingServices(kIOMainPortDefault, matchingDictionary, &iterator)
         if result != kIOReturnSuccess {
             print("Error IOServiceGetMatchingServices(): " + (String(cString: mach_error_string(result), encoding: String.Encoding.ascii) ?? "unknown error"))
             return
@@ -441,7 +441,8 @@ public class SMC {
 
     public func setFanSpeed(_ id: Int, speed: Int) -> Bool {
         guard let maxSpeed = self.getValue("F\(id)Mx") else { return false }
-        let targetSpeed = min(speed, Int(maxSpeed))
+        let minSpeed = Int(self.getValue("F\(id)Mn") ?? 0)
+        let targetSpeed = max(min(speed, Int(maxSpeed)), minSpeed)
 
         #if arch(arm64)
         var modeVal = SMCVal_t(fanModeKey(id))
