@@ -34,6 +34,7 @@ struct RulesEngineView: View {
                                 viewModel.rules.remove(at: idx)
                             }
                         })
+                        .equatable()
                     }
                     
                     Button(action: {
@@ -68,10 +69,18 @@ struct RulesEngineView: View {
     }
 }
 
-struct RuleRowView: View {
+struct RuleRowView: View, Equatable {
     @Binding var rule: TriggerRule
     var onDelete: () -> Void
-    
+
+    // Only the rule's own data drives this row. The parent observes the view
+    // model, so its body re-runs on every 1.5s poll (temps/RPM change); pruning
+    // on the rule value keeps those polls from re-laying-out every rule's stack
+    // of sliders and menu pickers. The binding identity and closure are ignored.
+    static func == (lhs: RuleRowView, rhs: RuleRowView) -> Bool {
+        lhs.rule == rhs.rule
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Header Row: Toggle, Sensor, Rule Type, Trash
@@ -206,6 +215,22 @@ struct RuleRowView: View {
                             .accentColor(.red)
                     }
                 }
+            }
+
+            // Battery-awareness toggle
+            HStack(spacing: 12) {
+                Spacer().frame(width: 48)
+                Image(systemName: "battery.75")
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
+                Text("Reduce speed 25% on battery")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                Spacer()
+                Toggle("", isOn: $rule.reduceOnBattery)
+                    .toggleStyle(SwitchToggleStyle(tint: .green))
+                    .labelsHidden()
+                    .scaleEffect(0.75)
             }
         }
         .padding(12)

@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - Models for JSON Parsing
-struct FanJSON: Codable, Identifiable {
+struct FanJSON: Codable, Identifiable, Equatable {
     let id: Int
     let name: String
     let currentSpeed: Int
@@ -30,7 +30,8 @@ struct TriggerRule: Identifiable, Codable, Hashable {
     var maxTemp: Double = 80.0
     var minSpeedPercent: Double = 20.0
     var maxSpeedPercent: Double = 100.0
-    
+    var reduceOnBattery: Bool = true
+
     enum SensorType: String, Codable, CaseIterable {
         case cpu = "CPU"
         case gpu = "GPU"
@@ -52,7 +53,8 @@ struct TriggerRule: Identifiable, Codable, Hashable {
         minTemp: Double = 40.0,
         maxTemp: Double = 80.0,
         minSpeedPercent: Double = 20.0,
-        maxSpeedPercent: Double = 100.0
+        maxSpeedPercent: Double = 100.0,
+        reduceOnBattery: Bool = true
     ) {
         self.id = id
         self.isEnabled = isEnabled
@@ -64,10 +66,11 @@ struct TriggerRule: Identifiable, Codable, Hashable {
         self.maxTemp = maxTemp
         self.minSpeedPercent = minSpeedPercent
         self.maxSpeedPercent = maxSpeedPercent
+        self.reduceOnBattery = reduceOnBattery
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, isEnabled, sensor, thresholdTemp, targetSpeedPercent, ruleType, minTemp, maxTemp, minSpeedPercent, maxSpeedPercent
+        case id, isEnabled, sensor, thresholdTemp, targetSpeedPercent, ruleType, minTemp, maxTemp, minSpeedPercent, maxSpeedPercent, reduceOnBattery
     }
 
     init(from decoder: Decoder) throws {
@@ -82,5 +85,6 @@ struct TriggerRule: Identifiable, Codable, Hashable {
         maxTemp = try container.decodeIfPresent(Double.self, forKey: .maxTemp) ?? 80.0
         minSpeedPercent = try container.decodeIfPresent(Double.self, forKey: .minSpeedPercent) ?? 20.0
         maxSpeedPercent = try container.decodeIfPresent(Double.self, forKey: .maxSpeedPercent) ?? 100.0
+        reduceOnBattery = try container.decodeIfPresent(Bool.self, forKey: .reduceOnBattery) ?? true
     }
 }

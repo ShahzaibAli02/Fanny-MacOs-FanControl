@@ -1,188 +1,112 @@
 //
 //  main.swift
-//  Fan Control Helper CLI
+//  Fan Control privileged helper (XPC daemon)
+//
+//  This is no longer a setuid CLI. It is a launchd-managed root daemon, installed
+//  by the app via SMAppService.daemon(...). It vends a single XPC service and does
+//  only the SMC writes that require root. Every incoming connection must satisfy a
+//  code-signing requirement (our Team ID + the app's bundle identifier) before any
+//  request is served, so arbitrary local processes cannot drive the SMC through it.
 //
 
 import Foundation
+import Security
 
-struct FanJSON: Codable {
-    let id: Int
-    let name: String
-    let currentSpeed: Int
-    let minSpeed: Int
-    let maxSpeed: Int
-    let targetSpeed: Int
-    let mode: Int
-}
+// MARK: - Service implementation (runs as root)
 
-struct SystemStatusJSON: Codable {
-    let fans: [FanJSON]
-    let cpuTemp: Double?
-    let gpuTemp: Double?
-    let batteryTemp: Double?
-}
+final class HelperService: NSObject, FanControlHelperProtocol {
+    func setFan(fanId: Int, mode: Int, speed: Int, withReply reply: @escaping (Bool, String) -> Void) {
+        // The daemon never trusts caller input blindly, even after code-sign checks.
+        guard fanId >= 0, fanId < 64 else {
+            reply(false, "Invalid fan id \(fanId)")
+            return
+        }
 
-func printHelp() {
-    let help = """
-    SMC Fan Control Helper CLI
-    Usage:
-      smc-helper get
-      smc-helper set <fanId> <mode> [<speed>]   (mode: 0 = auto, 1 = manual; speed in RPM)
-      smc-helper reset
-    """
-    print(help)
-}
-
-func getStatus() {
-    let smc = SMC.shared
-    
-    guard let fanCountVal = smc.getValue("FNum") else {
-        print("{}")
-        return
-    }
-    
-    let fanCount = Int(fanCountVal)
-    var fansList: [FanJSON] = []
-    
-    for i in 0..<fanCount {
-        let name = smc.getStringValue("F\(i)ID") ?? "Fan \(i)"
-        let current = Int(smc.getValue("F\(i)Ac") ?? 0)
-        let minS = Int(smc.getValue("F\(i)Mn") ?? 0)
-        let maxS = Int(smc.getValue("F\(i)Mx") ?? 0)
-        let target = Int(smc.getValue("F\(i)Tg") ?? 0)
-        
-        let modeKey = smc.fanModeKey(i)
-        let mode = Int(smc.getValue(modeKey) ?? 0)
-        
-        fansList.append(FanJSON(
-            id: i,
-            name: name,
-            currentSpeed: current,
-            minSpeed: minS,
-            maxSpeed: maxS,
-            targetSpeed: target,
-            mode: mode
-        ))
-    }
-    
-    // Read typical temperature sensors with comprehensive Intel / Apple Silicon fallback list
-    let cpuKeys = [
-        "TC0P", "TC0D", "TC0F", "TC1C", "TCAD", "TCBD",
-        "Tp09", "Tp0T", "Tp01", "Tp05", "Tp0D", "Tp0C", "Tp0g", "Tp0h", "Te0S"
-    ]
-    let gpuKeys = [
-        "TG0D", "TG0H", "TG0P",
-        "Tg05", "Tg0j", "Tg0g", "Tg01", "Tg0c"
-    ]
-    let batteryKeys = [
-        "TB0T", "TB1T", "TB2T", "Tw0P", "Ts0P", "Th0H"
-    ]
-    
-    func getFirstValidTemp(keys: [String]) -> Double? {
-        for key in keys {
-            if let val = smc.getValue(key), val > 0 && val < 150 {
-                return val
+        let smc = SMC.shared
+        switch mode {
+        case 0:
+            let ok = smc.setFanMode(fanId, mode: .automatic)
+            reply(ok, ok ? "Fan \(fanId) → automatic" : "Failed to set fan \(fanId) to automatic")
+        case 1:
+            guard speed >= 0, speed <= 100_000 else {
+                reply(false, "Invalid speed \(speed)")
+                return
             }
+            guard smc.setFanMode(fanId, mode: .forced) else {
+                reply(false, "Failed to set fan \(fanId) to manual")
+                return
+            }
+            let ok = smc.setFanSpeed(fanId, speed: speed)
+            reply(ok, ok ? "Fan \(fanId) → \(speed) RPM" : "Failed to set fan \(fanId) speed")
+        default:
+            reply(false, "Invalid mode \(mode); expected 0 (auto) or 1 (manual)")
         }
-        return nil
     }
-    
-    let cpuTemp = getFirstValidTemp(keys: cpuKeys)
-    let gpuTemp = getFirstValidTemp(keys: gpuKeys)
-    let batteryTemp = getFirstValidTemp(keys: batteryKeys)
-    
-    let status = SystemStatusJSON(
-        fans: fansList,
-        cpuTemp: cpuTemp,
-        gpuTemp: gpuTemp,
-        batteryTemp: batteryTemp
-    )
-    
-    if let jsonData = try? JSONEncoder().encode(status),
-       let jsonString = String(data: jsonData, encoding: .utf8) {
-        print(jsonString)
-    } else {
-        print("{}")
+
+    func resetAll(withReply reply: @escaping (Bool, String) -> Void) {
+        let ok = SMC.shared.resetFanControl()
+        reply(ok, ok ? "Reset all fans to automatic" : "Failed to reset fan control")
+    }
+
+    func ping(withReply reply: @escaping (String) -> Void) {
+        reply("ok")
     }
 }
 
-func setFan(fanId: Int, mode: Int, speed: Int?) {
-    let smc = SMC.shared
-    
-    if mode == 0 {
-        // Automatic mode
-        let success = smc.setFanMode(fanId, mode: .automatic)
-        if success {
-            print("SUCCESS: Fan \(fanId) set to Automatic")
-        } else {
-            print("ERROR: Failed to set Fan \(fanId) to Automatic")
-            exit(1)
+// MARK: - Listener delegate (client authentication)
+
+final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
+    private let service = HelperService()
+
+    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
+        guard let requirement = Self.clientCodeSigningRequirement() else {
+            // Ad-hoc / unsigned builds have no Team ID to pin against. Rather than
+            // accept anyone as root, refuse. (SMAppService can't register an
+            // unsigned daemon anyway, so this only bites bare local test runs.)
+            NSLog("smc-helper: refusing connection — no Team ID on this build; sign with Developer ID.")
+            return false
         }
-    } else if mode == 1 {
-        // Manual mode
-        guard let targetSpeed = speed else {
-            print("ERROR: Speed in RPM is required for manual mode")
-            exit(1)
-        }
-        
-        // 1. Set mode to forced
-        let modeSuccess = smc.setFanMode(fanId, mode: .forced)
-        guard modeSuccess else {
-            print("ERROR: Failed to set Fan \(fanId) mode to Manual")
-            exit(1)
-        }
-        
-        // 2. Set speed
-        let speedSuccess = smc.setFanSpeed(fanId, speed: targetSpeed)
-        if speedSuccess {
-            print("SUCCESS: Fan \(fanId) set to Manual (\(targetSpeed) RPM)")
-        } else {
-            print("ERROR: Failed to set Fan \(fanId) speed to \(targetSpeed) RPM")
-            exit(1)
-        }
-    } else {
-        print("ERROR: Invalid mode. Use 0 for auto, 1 for manual.")
-        exit(1)
+
+        // macOS 13+: enforce that the peer satisfies the requirement. If it does
+        // not, XPC invalidates the connection and no messages are delivered.
+        newConnection.setCodeSigningRequirement(requirement)
+
+        newConnection.exportedInterface = NSXPCInterface(with: FanControlHelperProtocol.self)
+        newConnection.exportedObject = service
+        newConnection.resume()
+        return true
+    }
+
+    /// Require the client to be Apple-signed, from *our* Team, and carrying the
+    /// app's bundle identifier. Built from the daemon's *own* signature so there
+    /// is no Team ID to hardcode or keep in sync across builds.
+    static func clientCodeSigningRequirement() -> String? {
+        guard let team = ownTeamIdentifier() else { return nil }
+        return "anchor apple generic and identifier \"\(HelperConstants.appBundleIdentifier)\" "
+             + "and certificate leaf[subject.OU] = \"\(team)\""
+    }
+
+    /// This daemon's Apple Developer Team identifier, read from its own signature.
+    static func ownTeamIdentifier() -> String? {
+        var codeRef: SecCode?
+        guard SecCodeCopySelf([], &codeRef) == errSecSuccess, let codeRef else { return nil }
+
+        var staticRef: SecStaticCode?
+        guard SecCodeCopyStaticCode(codeRef, [], &staticRef) == errSecSuccess, let staticRef else { return nil }
+
+        var infoRef: CFDictionary?
+        let flags = SecCSFlags(rawValue: UInt32(kSecCSSigningInformation))
+        guard SecCodeCopySigningInformation(staticRef, flags, &infoRef) == errSecSuccess,
+              let info = infoRef as? [String: Any] else { return nil }
+
+        return info[kSecCodeInfoTeamIdentifier as String] as? String
     }
 }
 
-func main() {
-    let args = CommandLine.arguments
-    guard args.count > 1 else {
-        printHelp()
-        return
-    }
-    
-    let cmd = args[1].lowercased()
-    
-    switch cmd {
-    case "get":
-        getStatus()
-    case "set":
-        guard args.count >= 4 else {
-            print("ERROR: Missing arguments for 'set'")
-            printHelp()
-            exit(1)
-        }
-        guard let fanId = Int(args[2]), let mode = Int(args[3]) else {
-            print("ERROR: Invalid fanId or mode")
-            exit(1)
-        }
-        let speed = args.count > 4 ? Int(args[4]) : nil
-        setFan(fanId: fanId, mode: mode, speed: speed)
-    case "reset":
-        let success = SMC.shared.resetFanControl()
-        if success {
-            print("SUCCESS: Reset fan controls")
-        } else {
-            print("ERROR: Failed to reset fan controls")
-            exit(1)
-        }
-    default:
-        print("ERROR: Unknown command '\(cmd)'")
-        printHelp()
-        exit(1)
-    }
-}
+// MARK: - Entry point
 
-main()
+let delegate = HelperListenerDelegate()
+let listener = NSXPCListener(machServiceName: HelperConstants.machServiceName)
+listener.delegate = delegate
+listener.resume()
+RunLoop.current.run()

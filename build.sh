@@ -6,7 +6,7 @@ set -euo pipefail
 APP_NAME="Fan Control"
 APP_EXECUTABLE="FanControl"
 HELPER_EXECUTABLE="smc-helper"
-SIGNING_IDENTITY="Developer ID Application: Shahzaib Ali (VJ3BBPZBDU)"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 
 APP_DIR="${APP_NAME}.app"
 CONTENTS_DIR="$APP_DIR/Contents"
@@ -21,13 +21,18 @@ MACOS_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET:-13.0}"
 ARCHS="${ARCHS:-arm64 x86_64}"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 
+HELPER_IDENTIFIER="com.pair.FanControl.helper"
+
 HELPER_SOURCES=(
     Core/SMC.swift
+    Shared/FanControlHelperProtocol.swift
     Helper/main.swift
 )
 
 APP_SOURCES=(
     Core/SMC.swift
+    Core/SystemStatusReader.swift
+    Shared/FanControlHelperProtocol.swift
     Models/*.swift
     ViewModels/*.swift
     Views/*.swift
@@ -73,6 +78,7 @@ for arch in $ARCHS; do
         -target "$target" \
         -sdk "$SDK_PATH" \
         -o "$helper_output" \
+        -framework Security \
         "${HELPER_SOURCES[@]}"
 
     echo "Compiling $APP_EXECUTABLE for $arch..."
@@ -84,6 +90,8 @@ for arch in $ARCHS; do
         -framework Cocoa \
         -framework SwiftUI \
         -framework IOKit \
+        -framework UserNotifications \
+        -framework ServiceManagement \
         "${APP_SOURCES[@]}"
 
     helper_slices+=("$helper_output")
@@ -116,6 +124,31 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
     <string>$MACOS_DEPLOYMENT_TARGET</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon.icns</string>
+</dict>
+</plist>
+EOF
+
+echo "Writing privileged helper launchd plist..."
+LAUNCH_DAEMONS_DIR="$CONTENTS_DIR/Library/LaunchDaemons"
+mkdir -p "$LAUNCH_DAEMONS_DIR"
+cat <<EOF > "$LAUNCH_DAEMONS_DIR/$HELPER_IDENTIFIER.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$HELPER_IDENTIFIER</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/$HELPER_EXECUTABLE</string>
+    <key>MachServices</key>
+    <dict>
+        <key>$HELPER_IDENTIFIER</key>
+        <true/>
+    </dict>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>com.pair.FanControl</string>
+    </array>
 </dict>
 </plist>
 EOF
@@ -153,8 +186,13 @@ echo "$HELPER_EXECUTABLE deployment targets:"
 vtool -show-build "$MACOS_DIR/$HELPER_EXECUTABLE" | grep "minos"
 
 # 7. Codesign app bundle and binaries
+# The helper is signed first (inner-to-outer) with an explicit identifier so the
+# app's XPC code-signing requirement can pin it. The app bundle is signed last,
+# which seals the LaunchDaemons plist. A real Developer ID identity is required
+# for SMAppService to register the daemon and for the mutual code-sign checks to
+# pass; ad-hoc ("-") builds compile and run but the daemon won't register.
 echo "Codesigning app and binaries..."
-codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$MACOS_DIR/$HELPER_EXECUTABLE"
+codesign --force --sign "$SIGNING_IDENTITY" --options runtime --identifier "$HELPER_IDENTIFIER" "$MACOS_DIR/$HELPER_EXECUTABLE"
 codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$MACOS_DIR/$APP_EXECUTABLE"
 codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$APP_DIR"
 

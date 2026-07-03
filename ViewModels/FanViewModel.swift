@@ -1,5 +1,8 @@
 import SwiftUI
 import AppKit
+import UserNotifications
+import IOKit.ps
+import ServiceManagement
 
 // MARK: - View Model
 class FanViewModel: ObservableObject {
@@ -15,6 +18,11 @@ class FanViewModel: ObservableObject {
     @Published var linkedFans: Bool = false
     @Published var errorMessage: String? = nil
     @Published var isPollingActive: Bool = false
+    @Published var isOnACPower: Bool = true
+
+    var maxFanSpeed: Int? {
+        fans.map { $0.currentSpeed }.max()
+    }
     
     @Published var rules: [TriggerRule] = [] {
         didSet {
@@ -35,81 +43,53 @@ class FanViewModel: ObservableObject {
     private var lastSetSpeedPercent: Double? = nil
     
     private var timer: Timer? = nil
-    
-    var helperPath: String {
-        let bundleHelper = Bundle.main.bundlePath + "/Contents/MacOS/smc-helper"
-        if FileManager.default.fileExists(atPath: bundleHelper) {
-            return bundleHelper
-        }
-        return FileManager.default.currentDirectoryPath + "/smc-helper"
-    }
-    
+
+    private let helper = PrivilegedHelperClient.shared
+
     init() {
         checkAuthorization()
         loadRules()
         loadHistory()
+        updatePowerSource()
         startPolling()
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
     
     func checkAuthorization() {
-        let path = helperPath
-        guard FileManager.default.fileExists(atPath: path) else {
-            DispatchQueue.main.async {
-                self.isAuthorized = false
-            }
-            return
-        }
-        
-        if let attributes = try? FileManager.default.attributesOfItem(atPath: path) {
-            let ownerId = attributes[.ownerAccountID] as? Int ?? -1
-            let posixPermissions = attributes[.posixPermissions] as? Int ?? 0
-            let isSetuid = (posixPermissions & 0o4000) != 0
-            
-            DispatchQueue.main.async {
-                self.isAuthorized = (ownerId == 0 && isSetuid)
-            }
-        } else {
-            DispatchQueue.main.async {
-                self.isAuthorized = false
-            }
+        let enabled = helper.isEnabled
+        DispatchQueue.main.async {
+            self.isAuthorized = enabled
         }
     }
-    
+
+    /// Registers the privileged helper daemon with launchd via SMAppService and
+    /// steers the user through approval if macOS requires it. Replaces the old
+    /// setuid (`chown root:wheel` + `chmod +s`) flow.
     func authorize() {
-        let path = helperPath
-        guard FileManager.default.fileExists(atPath: path) else {
-            self.errorMessage = "Helper tool 'smc-helper' not found. Please verify project compilation."
+        if let err = helper.register() {
+            self.errorMessage = "Could not register the helper: \(err)"
+            self.isAuthorized = false
             return
         }
-        
-        let appleScriptSource = """
-        do shell script "chown root:wheel '\(path)' && chmod +s '\(path)'" with administrator privileges
-        """
-        
-        guard let appleScript = NSAppleScript(source: appleScriptSource) else {
-            self.errorMessage = "Failed to compile authorization script."
-            return
-        }
-        
-        DispatchQueue.global(qos: .userInitiated).async {
-            var error: NSDictionary? = nil
-            appleScript.executeAndReturnError(&error)
-            
-            DispatchQueue.main.async {
-                if let err = error {
-                    let desc = err[NSAppleScript.errorMessage] as? String ?? "Authorization rejected or failed."
-                    if desc.contains("Read-only file system") {
-                        self.errorMessage = "Please move Fan Control to your Applications folder before authorizing. The helper tool cannot be configured on a read-only disk image."
-                    } else {
-                        self.errorMessage = desc
-                    }
-                    self.isAuthorized = false
-                } else {
-                    self.errorMessage = nil
-                    self.isAuthorized = true
-                    self.updateStatus()
-                }
-            }
+
+        switch helper.status {
+        case .enabled:
+            self.errorMessage = nil
+            self.isAuthorized = true
+            self.updateStatus()
+        case .requiresApproval:
+            self.errorMessage = "Almost done — approve “Fan Control” under System Settings ▸ General ▸ Login Items to enable fan adjustments."
+            self.isAuthorized = false
+            helper.openApprovalSettings()
+        case .notFound:
+            self.errorMessage = "Helper daemon not found in the app bundle. Rebuild the app with build.sh."
+            self.isAuthorized = false
+        case .notRegistered:
+            self.errorMessage = "Helper registration didn't take effect. Please try again."
+            self.isAuthorized = false
+        @unknown default:
+            self.errorMessage = "Unexpected helper status."
+            self.isAuthorized = false
         }
     }
     
@@ -121,63 +101,58 @@ class FanViewModel: ObservableObject {
         updateStatus()
     }
     
+    private var statusCheckCounter = 0
+    // helper.isEnabled queries SMAppService, which round-trips to
+    // servicemanagementd. That status essentially never changes outside of a
+    // deliberate System Settings action, so it doesn't need re-checking on
+    // every 1.5s poll — every 20th cycle (~30s) is plenty responsive.
+    private let authCheckInterval = 20
+
     func updateStatus() {
-        let path = helperPath
-        guard FileManager.default.fileExists(atPath: path) else { return }
-        
+        // SMC reads don't require root, so query in-process rather than going
+        // through the privileged helper on every poll cycle.
+        let shouldCheckAuth = statusCheckCounter % authCheckInterval == 0
+        statusCheckCounter += 1
         DispatchQueue.global(qos: .default).async {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: path)
-            task.arguments = ["get"]
-            
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = pipe
-            
-            do {
-                try task.run()
-                task.waitUntilExit()
-                
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let decoded = try? JSONDecoder().decode(SystemStatusJSON.self, from: data) {
-                    DispatchQueue.main.async {
-                        self.fans = decoded.fans
-                        self.cpuTemp = decoded.cpuTemp
-                        self.gpuTemp = decoded.gpuTemp
-                        self.batteryTemp = decoded.batteryTemp
-                        self.isPollingActive = true
-                        self.evaluateRules()
-                        self.recordHistoryIfNeeded()
-                    }
+            let decoded = SystemStatusReader.read()
+            // Keep authorization in sync: this picks up the user approving (or
+            // later removing) the daemon in System Settings without a relaunch.
+            let enabled = shouldCheckAuth ? self.helper.isEnabled : nil
+            DispatchQueue.main.async {
+                if let enabled {
+                    self.isAuthorized = enabled
                 }
-            } catch {
-                print("Status fetch failed: \(error)")
+                self.fans = decoded.fans
+                self.cpuTemp = decoded.cpuTemp
+                self.gpuTemp = decoded.gpuTemp
+                self.batteryTemp = decoded.batteryTemp
+                self.isPollingActive = true
+                self.updatePowerSource()
+                self.evaluateRules()
+                self.recordHistoryIfNeeded()
             }
         }
     }
+
+    private func updatePowerSource() {
+        guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef],
+              let firstSource = sources.first,
+              let description = IOPSGetPowerSourceDescription(snapshot, firstSource)?.takeUnretainedValue() as? [String: AnyObject],
+              let state = description[kIOPSPowerSourceStateKey] as? String
+        else {
+            // Desktop Macs (or anything without a reported power source) count as AC.
+            isOnACPower = true
+            return
+        }
+        isOnACPower = (state == kIOPSACPowerValue)
+    }
     
     func setFanMode(fanId: Int, mode: Int, speed: Int? = nil) {
-        let path = helperPath
-        guard FileManager.default.fileExists(atPath: path) else { return }
-        
-        DispatchQueue.global(qos: .userInitiated).async {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: path)
-            
-            var args = ["set", "\(fanId)", "\(mode)"]
-            if mode == 1, let spd = speed {
-                args.append("\(spd)")
-            }
-            task.arguments = args
-            
-            do {
-                try task.run()
-                task.waitUntilExit()
-                DispatchQueue.main.async {
-                    self.updateStatus()
-                }
-            } catch {
-                print("Set fan failed: \(error)")
+        helper.setFan(fanId: fanId, mode: mode, speed: speed ?? 0) { [weak self] ok, msg in
+            DispatchQueue.main.async {
+                self?.errorMessage = ok ? nil : msg
+                self?.updateStatus()
             }
         }
     }
@@ -209,30 +184,24 @@ class FanViewModel: ObservableObject {
     }
     
     func resetAll() {
-        let path = helperPath
-        guard FileManager.default.fileExists(atPath: path) else { return }
-        
-        DispatchQueue.global(qos: .userInitiated).async {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: path)
-            task.arguments = ["reset"]
-            
-            do {
-                try task.run()
-                task.waitUntilExit()
-                DispatchQueue.main.async {
-                    self.updateStatus()
-                }
-            } catch {
-                print("Reset failed: \(error)")
+        helper.resetAll { [weak self] ok, msg in
+            DispatchQueue.main.async {
+                self?.errorMessage = ok ? nil : msg
+                self?.updateStatus()
             }
         }
     }
-    
+
+    /// Synchronous reset used on app termination, where async work would be
+    /// killed before it completes. Blocks the quit briefly so fans don't get
+    /// left pinned at an override speed after the app exits.
+    @discardableResult
+    func resetAllBlocking() -> Bool {
+        guard isAuthorized else { return false }
+        return helper.resetAllBlocking()
+    }
+
     func setAllToPercentage(_ pct: Double) {
-        let path = helperPath
-        guard FileManager.default.fileExists(atPath: path) else { return }
-        
         for fan in fans {
             let range = Double(fan.maxSpeed - fan.minSpeed)
             let targetSpeed = Double(fan.minSpeed) + range * pct
@@ -261,51 +230,83 @@ class FanViewModel: ObservableObject {
     
     func evaluateRules() {
         guard isRulesEngineEnabled else { return }
-        
+
         var maxTargetPercent: Double? = nil
-        
+        var winningSensor: TriggerRule.SensorType? = nil
+
         for rule in rules where rule.isEnabled {
             guard let currentTemp = getTempFor(sensor: rule.sensor) else { continue }
-            
+
+            var candidatePercent: Double? = nil
+
             if rule.ruleType == .threshold {
                 if currentTemp >= rule.thresholdTemp {
-                    if maxTargetPercent == nil || rule.targetSpeedPercent > maxTargetPercent! {
-                        maxTargetPercent = rule.targetSpeedPercent
-                    }
+                    candidatePercent = rule.targetSpeedPercent
                 }
             } else if rule.ruleType == .curve {
                 if currentTemp >= rule.minTemp {
                     let range = rule.maxTemp - rule.minTemp
                     let tempDiff = currentTemp - rule.minTemp
                     let speedDiff = rule.maxSpeedPercent - rule.minSpeedPercent
-                    
+
                     var calculatedPercent = rule.minSpeedPercent
                     if range > 0 {
                         let ratio = min(max(tempDiff / range, 0.0), 1.0)
                         calculatedPercent = rule.minSpeedPercent + ratio * speedDiff
                     }
-                    
-                    if maxTargetPercent == nil || calculatedPercent > maxTargetPercent! {
-                        maxTargetPercent = calculatedPercent
-                    }
+                    candidatePercent = calculatedPercent
                 }
             }
+
+            guard var candidate = candidatePercent else { continue }
+            // Gentler on battery: scale down rule-driven speeds to conserve
+            // charge, unless the rule opts out (e.g. an emergency thermal rule).
+            if !isOnACPower && rule.reduceOnBattery {
+                candidate *= 0.75
+            }
+
+            if maxTargetPercent == nil || candidate > maxTargetPercent! {
+                maxTargetPercent = candidate
+                winningSensor = rule.sensor
+            }
         }
-        
+
         if let targetPercent = maxTargetPercent {
             let speedFraction = targetPercent / 100.0
             if !wasRuleApplied || lastSetSpeedPercent != targetPercent {
                 setAllToPercentage(speedFraction)
+                if let sensor = winningSensor {
+                    notifyRuleTriggered(sensorName: sensor.rawValue, percent: targetPercent)
+                }
                 lastSetSpeedPercent = targetPercent
                 wasRuleApplied = true
             }
         } else {
             if wasRuleApplied {
                 resetAll()
+                notifyRulesDisengaged()
                 wasRuleApplied = false
                 lastSetSpeedPercent = nil
             }
         }
+    }
+
+    private func notifyRuleTriggered(sensorName: String, percent: Double) {
+        let content = UNMutableNotificationContent()
+        content.title = "Fan Control"
+        content.body = "\(sensorName) rule activated: fans → \(Int(percent.rounded()))%"
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    private func notifyRulesDisengaged() {
+        let content = UNMutableNotificationContent()
+        content.title = "Fan Control"
+        content.body = "Temperatures back to normal — fans returned to automatic control."
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
     
     func getTempFor(sensor: TriggerRule.SensorType) -> Double? {

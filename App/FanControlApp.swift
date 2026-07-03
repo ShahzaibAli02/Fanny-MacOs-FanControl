@@ -1,22 +1,45 @@
 import SwiftUI
 import AppKit
 
+// Ensures fan speed overrides are released before the process actually
+// exits. Without this, quitting (or Cmd+Q) while a manual/rule override is
+// active leaves the SMC pinned at that speed indefinitely, contradicting
+// the app's documented "closing releases overrides" safety behavior.
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var viewModel: FanViewModel?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        viewModel?.resetAllBlocking()
+        return .terminateNow
+    }
+}
+
 @main
 struct FanControlApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var viewModel = FanViewModel()
-    
+
     init() {
         // Force the app to act as a normal foreground application with dock icon
         NSApplication.shared.setActivationPolicy(.regular)
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView(viewModel: viewModel)
                 .preferredColorScheme(.dark)
+                .onAppear {
+                    appDelegate.viewModel = viewModel
+                }
         }
         .windowStyle(HiddenTitleBarWindowStyle())
-        
+        // .contentMinSize lets the window open at the content's ideal size and be
+        // freely resized down to the content's minimum, with no upper bound. The
+        // previous .contentSize pinned the window to the content's min *and max*;
+        // since the root frame's max is .infinity, that made the window mis-size
+        // (and fail to track user resizing) instead of letting the content fill it.
+        .windowResizability(.contentMinSize)
+
         MenuBarExtra {
             Group {
                 ForEach(viewModel.fans) { fan in
@@ -72,8 +95,8 @@ struct FanControlApp: App {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "wind")
-                if let firstFan = viewModel.fans.first {
-                    Text("\(firstFan.currentSpeed) RPM")
+                if let maxSpeed = viewModel.maxFanSpeed {
+                    Text("\(maxSpeed) RPM")
                 } else {
                     Text("Fan Control")
                 }

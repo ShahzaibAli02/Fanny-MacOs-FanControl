@@ -1,7 +1,7 @@
 import SwiftUI
 
 // MARK: - Temperature Card View
-struct TempMetricCard: View {
+struct TempMetricCard: View, Equatable {
     let title: String
     let temp: Double?
     let iconName: String
