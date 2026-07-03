@@ -1,18 +1,29 @@
 import SwiftUI
 
 // MARK: - Individual Fan Control Row
-struct FanControlRow: View {
+struct FanControlRow: View, Equatable {
     let fan: FanJSON
-    @ObservedObject var viewModel: FanViewModel
-    
+    // Plain closures instead of an @ObservedObject on the view model: observing
+    // the view model here would re-render (and re-lay-out) every row on every
+    // 1.5s poll, regardless of whether this fan changed. With value inputs only,
+    // Equatable lets SwiftUI prune unchanged rows from the layout pass.
+    let onChangeMode: (Int) -> Void
+    let onChangeSpeed: (Int) -> Void
+
     @State private var sliderVal: Double = 0.0
     @State private var isEditingSlider: Bool = false
-    
-    init(fan: FanJSON, viewModel: FanViewModel) {
+
+    init(fan: FanJSON, onChangeMode: @escaping (Int) -> Void, onChangeSpeed: @escaping (Int) -> Void) {
         self.fan = fan
-        self.viewModel = viewModel
+        self.onChangeMode = onChangeMode
+        self.onChangeSpeed = onChangeSpeed
         // Initial setup of state
         _sliderVal = State(initialValue: Double(fan.targetSpeed))
+    }
+
+    // Closures are excluded from equality; only the fan's data drives a redraw.
+    static func == (lhs: FanControlRow, rhs: FanControlRow) -> Bool {
+        lhs.fan == rhs.fan
     }
     
     var body: some View {
@@ -20,6 +31,7 @@ struct FanControlRow: View {
             // Header Info
             HStack(spacing: 16) {
                 SpinningFanView(currentSpeed: Double(fan.currentSpeed), maxSpeed: Double(fan.maxSpeed))
+                    .equatable()
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(fan.name)
@@ -43,7 +55,7 @@ struct FanControlRow: View {
                 Picker("", selection: Binding(
                     get: { fan.mode },
                     set: { newMode in
-                        viewModel.changeFanMode(fanId: fan.id, mode: newMode)
+                        onChangeMode(newMode)
                     }
                 )) {
                     Text("Auto").tag(0)
@@ -75,7 +87,7 @@ struct FanControlRow: View {
                         onEditingChanged: { editing in
                             isEditingSlider = editing
                             if !editing {
-                                viewModel.changeFanSpeed(fanId: fan.id, speed: Int(sliderVal))
+                                onChangeSpeed(Int(sliderVal))
                             }
                         }
                     )
@@ -144,7 +156,7 @@ struct FanControlRow: View {
     func presetButton(title: String, val: Double) -> some View {
         Button(action: {
             sliderVal = val
-            viewModel.changeFanSpeed(fanId: fan.id, speed: Int(val))
+            onChangeSpeed(Int(val))
         }) {
             Text(title)
                 .font(.system(size: 11, weight: .bold))

@@ -69,7 +69,11 @@ struct ContentView: View {
                 .background(Color.white.opacity(0.08))
             
             ScrollView {
-                VStack(spacing: 20) {
+                // LazyVStack (vs VStack) so the ScrollView's unbounded vertical
+                // proposal doesn't trigger the full multi-pass size negotiation
+                // across every child on each re-layout — the hot path in the CPU
+                // sample. Children lay out independently and lazily.
+                LazyVStack(spacing: 20) {
                     // Temperature Sensors Row
                     HStack(spacing: 10) {
                         TempMetricCard(
@@ -79,6 +83,7 @@ struct ContentView: View {
                             iconColor: .green,
                             isSelected: selectedSensor == .battery
                         )
+                        .equatable()
                         .contentShape(Rectangle())
                         .onTapGesture {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -105,6 +110,7 @@ struct ContentView: View {
                             iconColor: .orange,
                             isSelected: selectedSensor == .cpu
                         )
+                        .equatable()
                         .contentShape(Rectangle())
                         .onTapGesture {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -131,6 +137,7 @@ struct ContentView: View {
                             iconColor: .purple,
                             isSelected: selectedSensor == .gpu
                         )
+                        .equatable()
                         .contentShape(Rectangle())
                         .onTapGesture {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -162,6 +169,7 @@ struct ContentView: View {
                                 }
                             }
                         )
+                        .equatable()
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.horizontal, 24)
                     }
@@ -298,9 +306,14 @@ struct ContentView: View {
                         }
                         .frame(height: 180)
                     } else {
-                        VStack(spacing: 16) {
+                        LazyVStack(spacing: 16) {
                             ForEach(viewModel.fans) { fan in
-                                FanControlRow(fan: fan, viewModel: viewModel)
+                                FanControlRow(
+                                    fan: fan,
+                                    onChangeMode: { mode in viewModel.changeFanMode(fanId: fan.id, mode: mode) },
+                                    onChangeSpeed: { speed in viewModel.changeFanSpeed(fanId: fan.id, speed: speed) }
+                                )
+                                .equatable()
                             }
                         }
                         .padding(.horizontal, 24)

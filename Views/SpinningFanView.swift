@@ -5,7 +5,7 @@ import SwiftUI
 // on every display refresh (up to 120Hz) forever — the main source of this
 // app's idle CPU usage. The rotation was purely decorative (speed is already
 // shown as an RPM number and via blade color), so it's drawn once instead.
-struct SpinningFanView: View {
+struct SpinningFanView: View, Equatable {
     let currentSpeed: Double
     let maxSpeed: Double
 

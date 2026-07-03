@@ -1,17 +1,47 @@
 import SwiftUI
 import Charts
 
-struct TempHistoryChartView: View {
+struct TempHistoryChartView: View, Equatable {
     let sensor: TriggerRule.SensorType
     let history: [TempRecord]
     let onClose: () -> Void
-    
+
     @State private var hoveredPoint: ChartPoint? = nil
-    
+
+    // Max number of points actually drawn. The history holds up to 12h of 30s
+    // samples (~1440 points); rendering every one is what made a single layout
+    // pass of this chart expensive. Downsampling caps the mark count.
+    private static let maxRenderedPoints = 120
+
+    // Only the data drives the chart. Excluding the closure lets `.equatable()`
+    // prune this subtree from the layout pass on polls where history is
+    // unchanged (history only records every 30s, but sensors update every 1.5s).
+    static func == (lhs: TempHistoryChartView, rhs: TempHistoryChartView) -> Bool {
+        lhs.sensor == rhs.sensor && lhs.history == rhs.history
+    }
+
     struct ChartPoint: Identifiable {
         let id = UUID()
         let time: Date
         let value: Double
+    }
+
+    // Evenly strides the points down to at most `maxRenderedPoints`, always
+    // keeping the last (most recent) sample so "CURRENT" stays accurate.
+    private func downsample(_ pts: [ChartPoint]) -> [ChartPoint] {
+        guard pts.count > Self.maxRenderedPoints else { return pts }
+        let step = Double(pts.count) / Double(Self.maxRenderedPoints)
+        var result: [ChartPoint] = []
+        result.reserveCapacity(Self.maxRenderedPoints + 1)
+        var cursor = 0.0
+        while Int(cursor) < pts.count {
+            result.append(pts[Int(cursor)])
+            cursor += step
+        }
+        if let last = pts.last, result.last?.id != last.id {
+            result.append(last)
+        }
+        return result
     }
     
     var sensorColor: Color {
@@ -66,6 +96,10 @@ struct TempHistoryChartView: View {
         let statsMin = points.map { $0.value }.min() ?? 0
         let statsMax = points.map { $0.value }.max() ?? 0
         let statsAvg = points.isEmpty ? 0 : points.map { $0.value }.reduce(0, +) / Double(points.count)
+
+        // Marks and hover hit-testing run against the downsampled set; the stats
+        // above stay on the full history for accuracy (that scan is cheap).
+        let sampled = downsample(points)
         
         VStack(spacing: 14) {
             // Header: Title + Sensor Type + Close button
@@ -133,7 +167,7 @@ struct TempHistoryChartView: View {
                 
                 // Swift Chart
                 Chart {
-                    ForEach(points) { point in
+                    ForEach(sampled) { point in
                         LineMark(
                             x: .value("Time", point.time),
                             y: .value("Temperature", point.value)
@@ -198,7 +232,7 @@ struct TempHistoryChartView: View {
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { value in
                                         if let date: Date = proxy.value(atX: value.location.x) {
-                                            if let closest = points.min(by: { abs($0.time.timeIntervalSince(date)) < abs($1.time.timeIntervalSince(date)) }) {
+                                            if let closest = sampled.min(by: { abs($0.time.timeIntervalSince(date)) < abs($1.time.timeIntervalSince(date)) }) {
                                                 hoveredPoint = closest
                                             }
                                         }
@@ -211,7 +245,7 @@ struct TempHistoryChartView: View {
                                 switch phase {
                                 case .active(let location):
                                     if let date: Date = proxy.value(atX: location.x) {
-                                        if let closest = points.min(by: { abs($0.time.timeIntervalSince(date)) < abs($1.time.timeIntervalSince(date)) }) {
+                                        if let closest = sampled.min(by: { abs($0.time.timeIntervalSince(date)) < abs($1.time.timeIntervalSince(date)) }) {
                                             hoveredPoint = closest
                                         }
                                     }

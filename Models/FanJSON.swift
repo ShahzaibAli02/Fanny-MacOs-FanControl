@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - Models for JSON Parsing
-struct FanJSON: Codable, Identifiable {
+struct FanJSON: Codable, Identifiable, Equatable {
     let id: Int
     let name: String
     let currentSpeed: Int
