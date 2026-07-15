@@ -219,6 +219,24 @@ struct ContentView: View {
                     if viewModel.isAuthorized && !viewModel.fans.isEmpty {
                         VStack(spacing: 16) {
                             HStack {
+                                Toggle(isOn: $viewModel.isAutoStart) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "autostartstop")
+                                            .foregroundColor(viewModel.isAutoStart ? .teal : .gray)
+                                        Text("Start at login (background)")
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                                .toggleStyle(SwitchToggleStyle(tint: .teal))
+                                .onChange(of: viewModel.isAutoStart) { newValue in
+                                    viewModel.toggleAutoStart(newValue);
+                                }
+                                
+                                Spacer()
+                            }
+                            
+                            HStack {
                                 Toggle(isOn: $viewModel.linkedFans) {
                                     HStack(spacing: 6) {
                                         Image(systemName: "link")
