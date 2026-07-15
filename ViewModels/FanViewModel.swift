@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
 
 // MARK: - View Model
 class FanViewModel: ObservableObject {
@@ -15,6 +16,7 @@ class FanViewModel: ObservableObject {
     @Published var linkedFans: Bool = false
     @Published var errorMessage: String? = nil
     @Published var isPollingActive: Bool = false
+    @Published var isAutoStart: Bool = SMAppService.mainApp.status == .enabled
     
     @Published var rules: [TriggerRule] = [] {
         didSet {
@@ -314,6 +316,17 @@ class FanViewModel: ObservableObject {
         case .gpu: return gpuTemp
         case .battery: return batteryTemp
         }
+    }
+    
+    func toggleAutoStart(_ newValue: Bool) {
+        do {
+            if (newValue) {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch { }
+        isAutoStart = SMAppService.mainApp.status == .enabled
     }
     
     // MARK: - Temperature History Management

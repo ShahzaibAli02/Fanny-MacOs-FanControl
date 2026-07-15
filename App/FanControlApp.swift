@@ -7,7 +7,7 @@ struct FanControlApp: App {
     
     init() {
         // Force the app to act as a normal foreground application with dock icon
-        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.setActivationPolicy(.accessory)
     }
     
     var body: some Scene {
