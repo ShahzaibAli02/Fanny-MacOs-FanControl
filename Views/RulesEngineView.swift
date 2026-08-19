@@ -86,23 +86,57 @@ struct FanResponseSettingsView: View {
 
             HStack(spacing: 16) {
                 responseControl(
-                    title: "Ramp up",
-                    value: $viewModel.rampUpTimeConstant,
-                    range: 0.5...5.0,
+                    title: "Rise command rate",
+                    value: $viewModel.maximumCommandRiseRatePercentPerSecond,
+                    range: 0.5...10.0,
                     step: 0.5,
-                    tint: .teal
+                    tint: .teal,
+                    unit: "%/s"
                 )
 
                 responseControl(
-                    title: "Ramp down",
-                    value: $viewModel.rampDownTimeConstant,
-                    range: 1.0...30.0,
-                    step: 1.0,
-                    tint: .purple
+                    title: "Fall command rate",
+                    value: $viewModel.maximumCommandFallRatePercentPerSecond,
+                    range: 0.5...10.0,
+                    step: 0.5,
+                    tint: .purple,
+                    unit: "%/s"
                 )
             }
 
-            Text("The target speed rises quickly and falls more gradually. A request of 90% or more is applied immediately.")
+            HStack(spacing: 16) {
+                responseControl(
+                    title: "Cooling hysteresis",
+                    value: $viewModel.coolingTemperatureHysteresis,
+                    range: 0.0...5.0,
+                    step: 0.5,
+                    tint: .orange,
+                    unit: "°C"
+                )
+
+                responseControl(
+                    title: "Min. target change",
+                    value: $viewModel.minimumCommandChangePercent,
+                    range: 1.0...5.0,
+                    step: 1.0,
+                    tint: .purple,
+                    unit: "%"
+                )
+            }
+
+            HStack {
+                responseControl(
+                    title: "Cooling confirmation",
+                    value: $viewModel.coolingConfirmationSeconds,
+                    range: 0.0...15.0,
+                    step: 1.0,
+                    tint: .blue,
+                    unit: "s"
+                )
+                Spacer()
+            }
+
+            Text("Temperature rises use the faster rise rate. A lower target must persist for the selected cooling confirmation time before the gentler fall rate begins; 0 s disables this hold. Requests of 90% or more are applied immediately.")
                 .font(.system(size: 10))
                 .foregroundColor(.gray)
         }
@@ -116,7 +150,8 @@ struct FanResponseSettingsView: View {
         value: Binding<Double>,
         range: ClosedRange<Double>,
         step: Double,
-        tint: Color
+        tint: Color,
+        unit: String
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -124,7 +159,7 @@ struct FanResponseSettingsView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.gray)
                 Spacer()
-                Text("\(value.wrappedValue, specifier: "%.1f") s")
+                Text("\(value.wrappedValue, specifier: "%.1f") \(unit)")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(tint)
             }

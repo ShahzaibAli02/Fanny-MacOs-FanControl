@@ -17,7 +17,7 @@ It features a dual-component design: a sandboxed SwiftUI GUI front-end that comm
 
 - **Real-Time RPM Monitor**: Displays actual fan speeds with a custom rotating vector fan blade animation that responds to changes in RPM.
 - **Auto-Trigger Rules Engine**: Set custom, automated temperature rules for **CPU**, **GPU**, or **Battery** (e.g., _if CPU ≥ 75°C, override all fans to 80%_). Multiple active rules are evaluated dynamically, prioritizing the highest safety speed, and automatically returning control to macOS once the sensors cool down.
-- **Adjustable Fan Response**: Smooth automatic target changes with independent ramp-up and ramp-down time constants, persisted locally. Defaults are a 1-second ramp-up and a 10-second ramp-down; requests of 90% or more bypass smoothing.
+- **Stable Automatic Response**: Independently configurable rise (default 6%/s) and fall (default 3%/s) command rates, cooling hysteresis (default 5°C), a target deadband (default 4%), and an 8-second cooling confirmation reduce audible target hunting while retaining a prompt thermal response. Requests of 90% or more bypass the rate limit.
 - **Manual Mode Controls**: Precise target speed adjustment sliders.
 - **Quick Presets**: Set speed thresholds instantly using the **Min**, **20%**, **50%**, **80%**, or **Max** buttons.
 - **Linked Fan Tuning**: Option to sync adjustments across all system fans simultaneously.
@@ -115,3 +115,8 @@ To return your fans to macOS automatic controller management:
 ## 📄 License
 
 This project is open-source software licensed under the [MIT License](LICENSE).
+
+## Fork and upstream handoff notes
+
+For the full change record, safety notes, local validation, and the proposed
+upstream pull-request split for this fork, see [docs/FORK_CHANGELOG.md](docs/FORK_CHANGELOG.md).

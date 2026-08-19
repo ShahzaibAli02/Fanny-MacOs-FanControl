@@ -2,252 +2,503 @@ import SwiftUI
 import Charts
 
 struct TempHistoryChartView: View {
-    let sensor: TriggerRule.SensorType
+    private let summaryLabelWidth: CGFloat = 48
+    private let summaryColumnWidth: CGFloat = 148
+
+    enum ChartSeries: Hashable {
+        case sensor(TriggerRule.SensorType)
+        case fanTarget
+    }
+
+    private enum TimeWindow: String, CaseIterable, Identifiable {
+        case thirtyMinutes
+        case oneHour
+        case twoHours
+        case twelveHours
+        case twentyFourHours
+
+        var id: String { rawValue }
+
+        var interval: TimeInterval {
+            switch self {
+            case .thirtyMinutes: return 30 * 60
+            case .oneHour: return 60 * 60
+            case .twoHours: return 2 * 60 * 60
+            case .twelveHours: return 12 * 60 * 60
+            case .twentyFourHours: return 24 * 60 * 60
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .thirtyMinutes: return "Last 30 min"
+            case .oneHour: return "Last hour"
+            case .twoHours: return "Last 2 hours"
+            case .twelveHours: return "Last 12 hours"
+            case .twentyFourHours: return "Last 24 hours"
+            }
+        }
+    }
+
     let history: [TempRecord]
-    let onClose: () -> Void
-    
-    @State private var hoveredPoint: ChartPoint? = nil
-    
+    let compactLayout: Bool
+
+    @State private var hoveredTime: Date? = nil
+    @AppStorage("temperatureHistoryDisplayWindow") private var timeWindowRawValue = TimeWindow.twoHours.rawValue
+    @AppStorage("showCPUHistory") private var showCPUHistory = true
+    @AppStorage("showGPUHistory") private var showGPUHistory = true
+    @AppStorage("showBatteryHistory") private var showBatteryHistory = true
+    @AppStorage("showFanTargetHistory") private var showFanTargetHistory = true
+
     struct ChartPoint: Identifiable {
-        let id = UUID()
+        let id: String
+        let series: ChartSeries
         let time: Date
         let value: Double
     }
-    
-    var sensorColor: Color {
+
+    private var selectedTimeWindow: TimeWindow {
+        TimeWindow(rawValue: timeWindowRawValue) ?? .twoHours
+    }
+
+    private var selectedSensors: [TriggerRule.SensorType] {
+        var sensors: [TriggerRule.SensorType] = []
+        if showCPUHistory { sensors.append(.cpu) }
+        if showGPUHistory { sensors.append(.gpu) }
+        if showBatteryHistory { sensors.append(.battery) }
+        return sensors
+    }
+
+    private var timeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate(
+            selectedTimeWindow == .twentyFourHours ? "MMM d HH:mm" : "HH:mm"
+        )
+        return formatter
+    }
+
+    private func sensorName(_ sensor: TriggerRule.SensorType) -> String {
+        switch sensor {
+        case .cpu: return "CPU"
+        case .gpu: return "GPU"
+        case .battery: return "Battery"
+        }
+    }
+
+    private func sensorColor(_ sensor: TriggerRule.SensorType) -> Color {
         switch sensor {
         case .cpu: return .orange
         case .gpu: return .purple
         case .battery: return .green
         }
     }
-    
-    var sensorIconName: String {
+
+    private func sensorIcon(_ sensor: TriggerRule.SensorType) -> String {
         switch sensor {
         case .cpu: return "cpu"
         case .gpu: return "gauge.with.needle"
         case .battery: return "battery.100.bolt"
         }
     }
-    
-    var sensorName: String {
-        switch sensor {
-        case .cpu: return "CPU Die"
-        case .gpu: return "GPU proximity"
-        case .battery: return "Battery"
+
+    private func seriesName(_ series: ChartSeries) -> String {
+        switch series {
+        case .sensor(let sensor): return sensorName(sensor)
+        case .fanTarget: return "Fan target"
         }
     }
-    
-    func valueForSensor(_ record: TempRecord) -> Double? {
+
+    private func seriesColor(_ series: ChartSeries) -> Color {
+        switch series {
+        case .sensor(let sensor): return sensorColor(sensor)
+        case .fanTarget: return .cyan
+        }
+    }
+
+    private func value(for sensor: TriggerRule.SensorType, in record: TempRecord) -> Double? {
         switch sensor {
         case .cpu: return record.cpu
         case .gpu: return record.gpu
         case .battery: return record.battery
         }
     }
-    
-    private var timeFormatter: DateFormatter {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        f.dateStyle = .none
-        return f
-    }
-    
-    var body: some View {
-        // Map all available history points to sensor values
-        let points = history
-            .compactMap { record -> ChartPoint? in
-                if let val = valueForSensor(record) {
-                    return ChartPoint(time: record.timestamp, value: val)
-                }
+
+    private func points(
+        for sensor: TriggerRule.SensorType,
+        from windowStart: Date,
+        through now: Date
+    ) -> [ChartPoint] {
+        history.compactMap { record in
+            guard record.timestamp >= windowStart,
+                  record.timestamp <= now,
+                  let temperature = value(for: sensor, in: record) else {
                 return nil
             }
-        
-        let statsMin = points.map { $0.value }.min() ?? 0
-        let statsMax = points.map { $0.value }.max() ?? 0
-        let statsAvg = points.isEmpty ? 0 : points.map { $0.value }.reduce(0, +) / Double(points.count)
-        
-        VStack(spacing: 14) {
-            // Header: Title + Sensor Type + Close button
+            return ChartPoint(
+                id: "\(record.id.uuidString)-\(sensor.rawValue)",
+                series: .sensor(sensor),
+                time: record.timestamp,
+                value: temperature
+            )
+        }
+    }
+
+    private func fanTargetPoints(from windowStart: Date, through now: Date) -> [ChartPoint] {
+        history.compactMap { record in
+            guard record.timestamp >= windowStart,
+                  record.timestamp <= now,
+                  let targetPercent = record.fanTargetPercent,
+                  (0.0...100.0).contains(targetPercent) else {
+                return nil
+            }
+            return ChartPoint(
+                id: "\(record.id.uuidString)-fan-target",
+                series: .fanTarget,
+                time: record.timestamp,
+                value: targetPercent
+            )
+        }
+    }
+
+    private func points(
+        for series: ChartSeries,
+        from windowStart: Date,
+        through now: Date
+    ) -> [ChartPoint] {
+        switch series {
+        case .sensor(let sensor):
+            return points(for: sensor, from: windowStart, through: now)
+        case .fanTarget:
+            return fanTargetPoints(from: windowStart, through: now)
+        }
+    }
+
+    var body: some View {
+        // The graph is a rolling window ending at the present moment, rather
+        // than a calendar-day view beginning at midnight.
+        let now = Date()
+        let windowStart = now.addingTimeInterval(-selectedTimeWindow.interval)
+        let displayedSeries = selectedSensors.map(ChartSeries.sensor)
+            + (showFanTargetHistory ? [.fanTarget] : [])
+        let pointsBySeries: [ChartSeries: [ChartPoint]] = Dictionary(
+            uniqueKeysWithValues: displayedSeries.map { series in
+                (series, points(for: series, from: windowStart, through: now))
+            }
+        )
+        let allPoints = displayedSeries.flatMap { pointsBySeries[$0] ?? [] }
+        let hoverPoints = hoveredTime.map { time in
+            displayedSeries.compactMap { series in
+                pointsBySeries[series]?.min {
+                    abs($0.time.timeIntervalSince(time)) < abs($1.time.timeIntervalSince(time))
+                }
+            }
+        } ?? []
+        // This is the one values strip for the chart: live values normally,
+        // or values at the inspected instant while the pointer is in the graph.
+        let inspectionPoints = hoverPoints.isEmpty
+            ? displayedSeries.compactMap { pointsBySeries[$0]?.last }
+            : hoverPoints
+        let chartScaleMaximum = max(
+            105.0,
+            ceil((allPoints.map(\.value).max() ?? 0.0) / 5.0) * 5.0
+        )
+
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 HStack(spacing: 8) {
-                    Image(systemName: sensorIconName)
-                        .foregroundColor(sensorColor)
+                    Image(systemName: "chart.xyaxis.line")
+                        .foregroundColor(.cyan)
                         .font(.system(size: 14, weight: .bold))
-                    Text("\(sensorName) Temperature History")
+                    Text("Temperature & fan target history")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.white)
                 }
-                
+
                 Spacer()
-                
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.gray)
-                        .padding(6)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(Circle())
+
+                Picker("History duration", selection: $timeWindowRawValue) {
+                    ForEach(TimeWindow.allCases) { window in
+                        Text(window.label).tag(window.rawValue)
+                    }
                 }
-                .buttonStyle(PlainButtonStyle())
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 112)
+                .help("Choose the rolling time range shown in the graph")
             }
-            
-            if points.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "chart.xyaxis.line")
-                        .font(.system(size: 24))
-                        .foregroundColor(.gray.opacity(0.5))
-                    Text("No temperature data recorded yet.")
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray)
-                }
-                .frame(height: 160)
-                .frame(maxWidth: .infinity)
-                .background(Color.black.opacity(0.15))
-                .cornerRadius(8)
+
+            HStack(spacing: 10) {
+                Color.clear.frame(width: summaryLabelWidth, height: 1)
+                sensorToggle(.cpu, isOn: $showCPUHistory)
+                    .frame(width: summaryColumnWidth, alignment: .leading)
+                sensorToggle(.gpu, isOn: $showGPUHistory)
+                    .frame(width: summaryColumnWidth, alignment: .leading)
+                sensorToggle(.battery, isOn: $showBatteryHistory)
+                    .frame(width: summaryColumnWidth, alignment: .leading)
+                fanTargetToggle
+                    .frame(width: summaryColumnWidth, alignment: .leading)
+                Spacer(minLength: 0)
+            }
+
+            if selectedSensors.isEmpty && !showFanTargetHistory {
+                emptyState(
+                    icon: "chart.xyaxis.line",
+                    message: "Select one or more series to display their history."
+                )
+            } else if allPoints.isEmpty {
+                emptyState(
+                    icon: "chart.xyaxis.line",
+                    message: "No temperature data recorded in this time range yet."
+                )
             } else {
-                // Statistics Row
-                HStack(spacing: 24) {
-                    StatItem(title: "CURRENT", value: String(format: "%.1f°C", points.last?.value ?? 0), color: sensorColor)
-                    StatItem(title: "AVERAGE", value: String(format: "%.1f°C", statsAvg), color: .white.opacity(0.8))
-                    StatItem(title: "MIN / MAX", value: String(format: "%.1f°C / %.1f°C", statsMin, statsMax), color: .white.opacity(0.8))
+                HStack(spacing: 10) {
+                    Text(hoveredTime == nil ? "Now" : timeFormatter.string(from: hoveredTime!))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.gray)
+                        .frame(width: summaryLabelWidth, alignment: .leading)
+
+                    inspectionColumn(for: .sensor(.cpu), in: inspectionPoints)
+                    inspectionColumn(for: .sensor(.gpu), in: inspectionPoints)
+                    inspectionColumn(for: .sensor(.battery), in: inspectionPoints)
+                    inspectionColumn(for: .fanTarget, in: inspectionPoints)
                     
-                    Spacer()
-                    
-                    if let hovered = hoveredPoint {
-                        HStack(spacing: 4) {
-                            Circle().fill(sensorColor).frame(width: 6, height: 6)
-                            Text("\(timeFormatter.string(from: hovered.time)):")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.gray)
-                            Text(String(format: "%.1f°C", hovered.value))
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.white.opacity(0.06))
-                        .cornerRadius(6)
-                    }
+                    Spacer(minLength: 0)
                 }
-                
-                // Swift Chart
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Color.white.opacity(0.06))
+                .cornerRadius(6)
+
+                HStack(spacing: 10) {
+                    Text("Range")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.gray)
+                        .frame(width: summaryLabelWidth, alignment: .leading)
+                    periodRangeColumn(for: .sensor(.cpu), points: pointsBySeries[.sensor(.cpu)])
+                    periodRangeColumn(for: .sensor(.gpu), points: pointsBySeries[.sensor(.gpu)])
+                    periodRangeColumn(for: .sensor(.battery), points: pointsBySeries[.sensor(.battery)])
+                    periodRangeColumn(for: .fanTarget, points: pointsBySeries[.fanTarget])
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.035))
+                .cornerRadius(6)
+
+                Text("Shared scale: temperature in °C; blue fan target in % (limited to 100%).")
+                    .font(.system(size: 9))
+                    .foregroundColor(.gray)
+
                 Chart {
-                    ForEach(points) { point in
-                        LineMark(
-                            x: .value("Time", point.time),
-                            y: .value("Temperature", point.value)
-                        )
-                        .foregroundStyle(sensorColor)
-                        .interpolationMethod(.monotone)
-                        
-                        AreaMark(
-                            x: .value("Time", point.time),
-                            y: .value("Temperature", point.value)
-                        )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [sensorColor.opacity(0.2), sensorColor.opacity(0.0)],
-                                startPoint: .top,
-                                endPoint: .bottom
+                    ForEach(selectedSensors, id: \.self) { sensor in
+                        ForEach(pointsBySeries[.sensor(sensor)] ?? []) { point in
+                            LineMark(
+                                x: .value("Time", point.time),
+                                y: .value("Temperature", point.value),
+                                series: .value("Sensor", sensor.rawValue)
                             )
-                        )
+                            .foregroundStyle(sensorColor(sensor))
+                            .interpolationMethod(.monotone)
+                        }
                     }
-                    
-                    if let hovered = hoveredPoint {
-                        RuleMark(x: .value("Hover Time", hovered.time))
+
+                    if showFanTargetHistory {
+                        ForEach(pointsBySeries[.fanTarget] ?? []) { point in
+                            LineMark(
+                                x: .value("Time", point.time),
+                                y: .value("Fan target", point.value),
+                                series: .value("Series", "Fan target")
+                            )
+                            .foregroundStyle(Color.cyan)
+                            .lineStyle(StrokeStyle(lineWidth: 2.2))
+                            .interpolationMethod(.stepCenter)
+                        }
+                    }
+
+                    if let hoveredTime {
+                        RuleMark(x: .value("Hover Time", hoveredTime))
                             .foregroundStyle(Color.white.opacity(0.25))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                        
-                        PointMark(
-                            x: .value("Hover Time", hovered.time),
-                            y: .value("Hover Temp", hovered.value)
-                        )
-                        .foregroundStyle(.white)
-                        .symbolSize(80)
+
+                        ForEach(hoverPoints) { point in
+                            PointMark(
+                                x: .value("Hover Time", point.time),
+                                y: .value("Hover Value", point.value)
+                            )
+                            .foregroundStyle(seriesColor(point.series))
+                            .symbolSize(80)
+                        }
                     }
                 }
+                .chartXScale(domain: windowStart...now)
+                .chartYScale(domain: 0.0...chartScaleMaximum)
                 .chartXAxis {
-                    AxisMarks { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(Color.white.opacity(0.05))
-                        AxisValueLabel()
+                    AxisMarks(values: .automatic(desiredCount: 6)) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.8))
+                            .foregroundStyle(Color.white.opacity(0.14))
+                        AxisTick(stroke: StrokeStyle(lineWidth: 0.8))
+                            .foregroundStyle(Color.white.opacity(0.18))
+                        AxisValueLabel(format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute())
                             .foregroundStyle(Color.gray)
                             .font(.system(size: 9))
                     }
                 }
                 .chartYAxis {
-                    AxisMarks { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(Color.white.opacity(0.05))
-                        if let tempVal = value.as(Double.self) {
+                    AxisMarks(values: .stride(by: 5)) { value in
+                        if let temperature = value.as(Double.self) {
+                            let roundedTemperature = Int(temperature.rounded())
+                            let isMajor = roundedTemperature.isMultiple(of: 10)
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: isMajor ? 0.9 : 0.4))
+                                .foregroundStyle(Color.white.opacity(isMajor ? 0.18 : 0.08))
+                            if isMajor {
+                                AxisTick(stroke: StrokeStyle(lineWidth: 0.9))
+                                    .foregroundStyle(Color.white.opacity(0.22))
                             AxisValueLabel {
-                                Text(String(format: "%.0f°C", tempVal))
-                                    .foregroundColor(.gray)
-                                    .font(.system(size: 9))
+                                Text(String(format: "%.0f", temperature))
+                                        .foregroundColor(.gray)
+                                        .font(.system(size: 9))
+                                }
                             }
                         }
                     }
                 }
                 .chartOverlay { proxy in
-                    GeometryReader { geometry in
+                    GeometryReader { _ in
                         Rectangle()
                             .fill(Color.clear)
                             .contentShape(Rectangle())
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { value in
-                                        if let date: Date = proxy.value(atX: value.location.x) {
-                                            if let closest = points.min(by: { abs($0.time.timeIntervalSince(date)) < abs($1.time.timeIntervalSince(date)) }) {
-                                                hoveredPoint = closest
-                                            }
-                                        }
+                                        updateHoveredTime(at: value.location.x, using: proxy, from: allPoints)
                                     }
                                     .onEnded { _ in
-                                        hoveredPoint = nil
+                                        hoveredTime = nil
                                     }
                             )
                             .onContinuousHover { phase in
                                 switch phase {
                                 case .active(let location):
-                                    if let date: Date = proxy.value(atX: location.x) {
-                                        if let closest = points.min(by: { abs($0.time.timeIntervalSince(date)) < abs($1.time.timeIntervalSince(date)) }) {
-                                            hoveredPoint = closest
-                                        }
-                                    }
+                                    updateHoveredTime(at: location.x, using: proxy, from: allPoints)
                                 case .ended:
-                                    hoveredPoint = nil
+                                    hoveredTime = nil
                                 }
                             }
                     }
                 }
-                .frame(height: 160)
+                .frame(height: compactLayout ? 160 : 240)
             }
         }
-        .padding(16)
+        .padding(compactLayout ? 12 : 16)
         .background(Color.white.opacity(0.02))
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.white.opacity(0.05), lineWidth: 1)
         )
-    }
-}
-
-// MARK: - Mini Stats Component
-struct StatItem: View {
-    let title: String
-    let value: String
-    let color: Color
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.system(size: 8, weight: .bold))
-                .foregroundColor(.gray)
-            Text(value)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(color)
+        .onChange(of: displayedSeries) { _ in
+            hoveredTime = nil
         }
+        .onChange(of: timeWindowRawValue) { _ in
+            hoveredTime = nil
+        }
+    }
+
+    private func sensorToggle(_ sensor: TriggerRule.SensorType, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Label(sensorName(sensor), systemImage: sensorIcon(sensor))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(sensorColor(sensor))
+        }
+        .toggleStyle(CheckboxToggleStyle())
+        .help("Show \(sensorName(sensor)) temperature in the graph")
+    }
+
+    private var fanTargetToggle: some View {
+        Toggle(isOn: $showFanTargetHistory) {
+            Label("Fan target", systemImage: "fanblades")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.cyan)
+        }
+        .toggleStyle(CheckboxToggleStyle())
+        .help("Show the highest requested fan speed as a percentage")
+    }
+
+    private func emptyState(icon: String, message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundColor(.gray.opacity(0.5))
+            Text(message)
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+        }
+        .frame(height: compactLayout ? 56 : 72)
+        .frame(maxWidth: .infinity)
+        .background(Color.black.opacity(0.15))
+        .cornerRadius(8)
+    }
+
+    private func inspectionValue(_ point: ChartPoint) -> some View {
+        HStack(spacing: 4) {
+            Text(seriesName(point.series))
+                .foregroundColor(seriesColor(point.series))
+            Text(
+                point.series == .fanTarget
+                    ? String(format: "%.1f%%", point.value)
+                    : String(format: "%.1f°C", point.value)
+            )
+            .fontWeight(.bold)
+            .foregroundColor(.white)
+        }
+        .font(.system(size: 10, weight: .medium))
+    }
+
+    private func inspectionColumn(for series: ChartSeries, in points: [ChartPoint]) -> some View {
+        Group {
+            if let point = points.first(where: { $0.series == series }) {
+                inspectionValue(point)
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: summaryColumnWidth, alignment: .leading)
+    }
+
+    private func periodRangeColumn(for series: ChartSeries, points: [ChartPoint]?) -> some View {
+        Group {
+            if let points, !points.isEmpty {
+                periodRange(series: series, points: points)
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: summaryColumnWidth, alignment: .leading)
+    }
+
+    private func periodRange(series: ChartSeries, points: [ChartPoint]) -> some View {
+        let minimum = points.map(\.value).min() ?? 0
+        let maximum = points.map(\.value).max() ?? 0
+        let unit = series == .fanTarget ? "%" : "°C"
+
+        return HStack(spacing: 4) {
+            Text(seriesName(series))
+                .foregroundColor(seriesColor(series))
+            Text(String(format: "%.1f–%.1f%@", minimum, maximum, unit))
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+        }
+        .font(.system(size: 9, weight: .medium))
+    }
+
+    private func updateHoveredTime(
+        at xPosition: CGFloat,
+        using proxy: ChartProxy,
+        from points: [ChartPoint]
+    ) {
+        guard let date: Date = proxy.value(atX: xPosition) else { return }
+        hoveredTime = points.min {
+            abs($0.time.timeIntervalSince(date)) < abs($1.time.timeIntervalSince(date))
+        }?.time
     }
 }

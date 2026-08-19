@@ -31,7 +31,9 @@ struct FanControlApp: App {
                 }
         }
         .windowStyle(HiddenTitleBarWindowStyle())
-        .defaultSize(width: 760, height: 820)
+        // macOS constrains this to the usable display automatically. A taller
+        // default gives the first window enough room to reveal auto controls.
+        .defaultSize(width: 960, height: 900)
         
         MenuBarExtra {
             Group {

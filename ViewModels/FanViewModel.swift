@@ -11,6 +11,7 @@ class FanViewModel: ObservableObject {
     @Published var tempHistory: [TempRecord] = []
     
     private var lastHistoryRecordTime: Date? = nil
+    private let historyRetentionInterval: TimeInterval = 24 * 60 * 60
     
     @Published var isAuthorized: Bool = false
     @Published var linkedFans: Bool = false
@@ -36,23 +37,47 @@ class FanViewModel: ObservableObject {
             }
         }
     }
-    @Published var rampUpTimeConstant: Double = 1.0 {
+    @Published var maximumCommandRiseRatePercentPerSecond: Double = 6.0 {
         didSet {
-            UserDefaults.standard.set(rampUpTimeConstant, forKey: "rampUpTimeConstant")
+            UserDefaults.standard.set(
+                maximumCommandRiseRatePercentPerSecond,
+                forKey: "maximumCommandRiseRatePercentPerSecond"
+            )
         }
     }
-    @Published var rampDownTimeConstant: Double = 10.0 {
+    @Published var maximumCommandFallRatePercentPerSecond: Double = 3.0 {
         didSet {
-            UserDefaults.standard.set(rampDownTimeConstant, forKey: "rampDownTimeConstant")
+            UserDefaults.standard.set(
+                maximumCommandFallRatePercentPerSecond,
+                forKey: "maximumCommandFallRatePercentPerSecond"
+            )
+        }
+    }
+    @Published var coolingTemperatureHysteresis: Double = 5.0 {
+        didSet {
+            UserDefaults.standard.set(coolingTemperatureHysteresis, forKey: "coolingTemperatureHysteresis")
+        }
+    }
+    @Published var minimumCommandChangePercent: Double = 4.0 {
+        didSet {
+            UserDefaults.standard.set(minimumCommandChangePercent, forKey: "minimumCommandChangePercent")
+        }
+    }
+    @Published var coolingConfirmationSeconds: Double = 8.0 {
+        didSet {
+            UserDefaults.standard.set(coolingConfirmationSeconds, forKey: "coolingConfirmationSeconds")
         }
     }
     private var wasRuleApplied = false
     private var lastSetSpeedPercent: Double? = nil
     private var filteredRuleTargetPercent: Double? = nil
+    private var deadbandedRuleTargetPercent: Double? = nil
     private var lastRuleEvaluationDate: Date? = nil
+    private var heldControlTemperatures: [TriggerRule.SensorType: Double] = [:]
+    private var pendingCoolingTargetPercent: Double? = nil
+    private var coolingConfirmationStartDate: Date? = nil
 
     private let emergencyBypassPercent = 90.0
-    private let updateResolutionPercent = 1.0
     private let releaseToAutoPercent = 0.5
     
     private var timer: Timer? = nil
@@ -154,12 +179,10 @@ class FanViewModel: ObservableObject {
     }
 
     private var pollingInterval: TimeInterval {
-        if isAppActive {
-            return 1.5
-        }
-        // Rules still run while the app is hidden, but a slightly slower background
-        // cadence avoids repeatedly starting the privileged helper when it is idle.
-        return isRulesEngineEnabled ? 3.0 : 6.0
+        // Thermal protection is independent of the window's visibility. The SMC is
+        // sampled at the same one-second cadence whether the app is frontmost,
+        // covered, or hidden, so automatic rules always have the same response time.
+        1.0
     }
     
     func updateStatus() {
@@ -323,19 +346,129 @@ class FanViewModel: ObservableObject {
 
     private func loadResponseSettings() {
         let defaults = UserDefaults.standard
-        if defaults.object(forKey: "rampUpTimeConstant") != nil {
-            rampUpTimeConstant = defaults.double(forKey: "rampUpTimeConstant")
+        if defaults.object(forKey: "maximumCommandRiseRatePercentPerSecond") != nil {
+            maximumCommandRiseRatePercentPerSecond = defaults.double(
+                forKey: "maximumCommandRiseRatePercentPerSecond"
+            )
         }
-        if defaults.object(forKey: "rampDownTimeConstant") != nil {
-            rampDownTimeConstant = defaults.double(forKey: "rampDownTimeConstant")
+        if defaults.object(forKey: "maximumCommandFallRatePercentPerSecond") != nil {
+            maximumCommandFallRatePercentPerSecond = defaults.double(
+                forKey: "maximumCommandFallRatePercentPerSecond"
+            )
+        }
+        if defaults.object(forKey: "coolingTemperatureHysteresis") != nil {
+            coolingTemperatureHysteresis = defaults.double(forKey: "coolingTemperatureHysteresis")
+        }
+        if defaults.object(forKey: "minimumCommandChangePercent") != nil {
+            minimumCommandChangePercent = defaults.double(forKey: "minimumCommandChangePercent")
+        }
+        if defaults.object(forKey: "coolingConfirmationSeconds") != nil {
+            coolingConfirmationSeconds = defaults.double(forKey: "coolingConfirmationSeconds")
         }
     }
 
     private func resetRuleResponse() {
         filteredRuleTargetPercent = nil
+        deadbandedRuleTargetPercent = nil
         lastRuleEvaluationDate = nil
+        heldControlTemperatures.removeAll()
+        clearCoolingConfirmation()
     }
 
+    /// Lets temperature increases through immediately, but holds the last accepted
+    /// temperature while cooling until it has fallen by the selected deadband. This
+    /// avoids small sensor fluctuations repeatedly reducing and restoring fan demand.
+    private func temperatureForFanControl(
+        _ temperature: Double,
+        sensor: TriggerRule.SensorType
+    ) -> Double {
+        guard let heldTemperature = heldControlTemperatures[sensor] else {
+            heldControlTemperatures[sensor] = temperature
+            return temperature
+        }
+
+        let hysteresis = max(coolingTemperatureHysteresis, 0)
+        if temperature >= heldTemperature || temperature <= heldTemperature - hysteresis {
+            heldControlTemperatures[sensor] = temperature
+            return temperature
+        }
+
+        return heldTemperature
+    }
+
+    /// Ignores small demand changes before they reach the command-rate limiter.
+    /// Downward changes also need a sustained lower thermal demand, which avoids
+    /// releasing fan speed for a short-lived dip in CPU or GPU power.
+    private func deadbandedRuleTarget(toward desiredPercent: Double, now: Date) -> Double {
+        guard let previous = deadbandedRuleTargetPercent else {
+            deadbandedRuleTargetPercent = desiredPercent
+            clearCoolingConfirmation()
+            return desiredPercent
+        }
+
+        if desiredPercent >= emergencyBypassPercent {
+            deadbandedRuleTargetPercent = desiredPercent
+            clearCoolingConfirmation()
+            return desiredPercent
+        }
+
+        let change = desiredPercent - previous
+        if change >= 0 {
+            // A renewed thermal demand cancels any pending cooling release.
+            clearCoolingConfirmation()
+            if change >= minimumCommandChangePercent {
+                deadbandedRuleTargetPercent = desiredPercent
+            }
+            return deadbandedRuleTargetPercent ?? desiredPercent
+        }
+
+        // A thermal recovery that reverses before being confirmed starts the
+        // confirmation interval again, even if it remains below the current target.
+        if let pendingTarget = pendingCoolingTargetPercent,
+           desiredPercent > pendingTarget {
+            pendingCoolingTargetPercent = desiredPercent
+            coolingConfirmationStartDate = now
+        }
+
+        guard abs(change) >= minimumCommandChangePercent else {
+            return previous
+        }
+
+        let confirmationInterval = max(coolingConfirmationSeconds, 0)
+        guard confirmationInterval > 0 else {
+            deadbandedRuleTargetPercent = desiredPercent
+            clearCoolingConfirmation()
+            return desiredPercent
+        }
+
+        if pendingCoolingTargetPercent == nil {
+            pendingCoolingTargetPercent = desiredPercent
+            coolingConfirmationStartDate = now
+            return previous
+        }
+
+        pendingCoolingTargetPercent = min(pendingCoolingTargetPercent ?? desiredPercent, desiredPercent)
+        guard let startDate = coolingConfirmationStartDate,
+              now.timeIntervalSince(startDate) >= confirmationInterval else {
+            return previous
+        }
+
+        let confirmedTarget = pendingCoolingTargetPercent ?? desiredPercent
+        deadbandedRuleTargetPercent = confirmedTarget
+        clearCoolingConfirmation()
+        return confirmedTarget
+    }
+
+    private func clearCoolingConfirmation() {
+        pendingCoolingTargetPercent = nil
+        coolingConfirmationStartDate = nil
+    }
+
+    /// Moves the automatic command at a bounded, predictable rate. This is a
+    /// slew-rate limiter, rather than a time-constant filter: it gives the same
+    /// maximum command change per second for a small or large temperature step.
+    /// Heating uses a higher configurable rate than cooling by default, so the
+    /// controller can react promptly to load while releasing fan speed gently.
     private func filteredRuleTarget(toward desiredPercent: Double, now: Date) -> Double {
         defer { lastRuleEvaluationDate = now }
 
@@ -353,11 +486,12 @@ class FanViewModel: ObservableObject {
         }
 
         let elapsed = max(now.timeIntervalSince(previousDate), 0.01)
-        let timeConstant = desiredPercent > previous
-            ? rampUpTimeConstant
-            : rampDownTimeConstant
-        let alpha = 1.0 - exp(-elapsed / max(timeConstant, 0.01))
-        let filtered = previous + alpha * (desiredPercent - previous)
+        let change = desiredPercent - previous
+        let maximumRate = change >= 0
+            ? maximumCommandRiseRatePercentPerSecond
+            : maximumCommandFallRatePercentPerSecond
+        let maximumChange = max(maximumRate, 0.1) * elapsed
+        let filtered = previous + min(max(change, -maximumChange), maximumChange)
 
         filteredRuleTargetPercent = filtered
         return filtered
@@ -369,7 +503,8 @@ class FanViewModel: ObservableObject {
         var maxTargetPercent: Double? = nil
         
         for rule in rules where rule.isEnabled {
-            guard let currentTemp = getTempFor(sensor: rule.sensor) else { continue }
+            guard let measuredTemp = getTempFor(sensor: rule.sensor) else { continue }
+            let currentTemp = temperatureForFanControl(measuredTemp, sensor: rule.sensor)
             
             if rule.ruleType == .threshold {
                 if currentTemp >= rule.thresholdTemp {
@@ -397,14 +532,19 @@ class FanViewModel: ObservableObject {
         }
         
         let desiredPercent = maxTargetPercent ?? 0.0
-        let filteredPercent = filteredRuleTarget(toward: desiredPercent, now: Date())
+        let now = Date()
+        let stabilizedPercent = deadbandedRuleTarget(toward: desiredPercent, now: now)
+        let filteredPercent = filteredRuleTarget(toward: stabilizedPercent, now: now)
 
         // When all rules clear, ramp down to the physical fan minimum first, then
         // yield control back to macOS instead of switching to Auto abruptly.
         if desiredPercent > 0.0 || filteredPercent > releaseToAutoPercent {
+            let requiresEmergencyIncrease = stabilizedPercent >= emergencyBypassPercent
+                && (lastSetSpeedPercent == nil || filteredPercent > lastSetSpeedPercent!)
             if !wasRuleApplied ||
                 lastSetSpeedPercent == nil ||
-                abs(filteredPercent - lastSetSpeedPercent!) >= updateResolutionPercent {
+                requiresEmergencyIncrease ||
+                abs(filteredPercent - lastSetSpeedPercent!) >= 0.1 {
                 setAllToPercentage(min(max(filteredPercent, 0.0), 100.0) / 100.0)
                 lastSetSpeedPercent = filteredPercent
                 wasRuleApplied = true
@@ -484,7 +624,17 @@ class FanViewModel: ObservableObject {
             let cpu = cleanHistoricalTemperature(record.cpu, previous: &previousCPU, sensor: .cpu)
             let gpu = cleanHistoricalTemperature(record.gpu, previous: &previousGPU, sensor: .gpu)
             let battery = cleanHistoricalTemperature(record.battery, previous: &previousBattery, sensor: .battery)
-            return TempRecord(id: record.id, timestamp: record.timestamp, cpu: cpu, gpu: gpu, battery: battery)
+            let fanTargetPercent = record.fanTargetPercent.flatMap { candidate in
+                candidate.isFinite && (0.0...100.0).contains(candidate) ? candidate : nil
+            }
+            return TempRecord(
+                id: record.id,
+                timestamp: record.timestamp,
+                cpu: cpu,
+                gpu: gpu,
+                battery: battery,
+                fanTargetPercent: fanTargetPercent
+            )
         }
     }
 
@@ -517,16 +667,35 @@ class FanViewModel: ObservableObject {
             guard now.timeIntervalSince(lastTime) >= 30.0 else { return }
         }
         
-        let record = TempRecord(timestamp: now, cpu: cpuTemp, gpu: gpuTemp, battery: batteryTemp)
+        let record = TempRecord(
+            timestamp: now,
+            cpu: cpuTemp,
+            gpu: gpuTemp,
+            battery: batteryTemp,
+            fanTargetPercent: highestFanTargetPercent()
+        )
         tempHistory.append(record)
         lastHistoryRecordTime = now
         
         pruneHistory()
         saveHistory()
     }
+
+    /// The history graph has one fan-target series. When fans differ, record the
+    /// highest SMC target percentage so the trace remains conservative and useful
+    /// for comparing thermal demand with the strongest commanded cooling response.
+    private func highestFanTargetPercent() -> Double? {
+        fans.compactMap { fan -> Double? in
+            let range = fan.maxSpeed - fan.minSpeed
+            guard range > 0 else { return nil }
+            let percentage = 100.0 * Double(fan.targetSpeed - fan.minSpeed) / Double(range)
+            return min(max(percentage, 0.0), 100.0)
+        }
+        .max()
+    }
     
     private func pruneHistory() {
-        let cutoff = Date().addingTimeInterval(-12 * 3600) // 12 hours ago
+        let cutoff = Date().addingTimeInterval(-historyRetentionInterval)
         tempHistory.removeAll { $0.timestamp < cutoff }
     }
     
@@ -539,7 +708,8 @@ class FanViewModel: ObservableObject {
     private func loadHistory() {
         if let data = UserDefaults.standard.data(forKey: "tempHistory"),
            let decoded = try? JSONDecoder().decode([TempRecord].self, from: data) {
-            self.tempHistory = cleanHistory(decoded)
+            let cutoff = Date().addingTimeInterval(-historyRetentionInterval)
+            self.tempHistory = cleanHistory(decoded).filter { $0.timestamp >= cutoff }
             self.lastHistoryRecordTime = self.tempHistory.last?.timestamp
             saveHistory()
         }
