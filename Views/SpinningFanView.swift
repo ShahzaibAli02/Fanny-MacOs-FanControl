@@ -4,32 +4,12 @@ import SwiftUI
 struct SpinningFanView: View {
     let currentSpeed: Double
     let maxSpeed: Double
-    @Environment(\.scenePhase) private var scenePhase
-
-    private var shouldAnimate: Bool {
-        scenePhase == .active && currentSpeed > 0
-    }
     
     var body: some View {
-        Group {
-            if shouldAnimate {
-                // A 15 FPS visual cue is smooth enough for this small icon and avoids
-                // redrawing a Canvas at the display refresh rate.
-                TimelineView(.periodic(from: .now, by: 1.0 / 15.0)) { timeline in
-                    fanDrawing(angle: rotationAngle(at: timeline.date))
-                }
-            } else {
-                // Stop all periodic work when Fan Control is not the active app.
-                fanDrawing(angle: 0)
-            }
-        }
-        .frame(width: 80, height: 80)
-    }
-
-    private func rotationAngle(at date: Date) -> Double {
-        // Keep the visual speed readable rather than attempting to portray physical RPM.
-        let turnsPerSecond = max(currentSpeed, 200.0) / 1_000.0 * 0.58
-        return date.timeIntervalSinceReferenceDate * turnsPerSecond * 360.0
+        // A static indicator avoids a permanent display-refresh loop. The orientation
+        // still changes naturally whenever a new measured RPM arrives.
+        fanDrawing(angle: currentSpeed.truncatingRemainder(dividingBy: 360.0))
+            .frame(width: 80, height: 80)
     }
 
     private func fanDrawing(angle: Double) -> some View {
