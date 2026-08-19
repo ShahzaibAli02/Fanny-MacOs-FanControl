@@ -19,7 +19,7 @@ struct TempMetricCard: View {
             }
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(L10n.text(title))
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(.gray)
                     .textCase(.uppercase)

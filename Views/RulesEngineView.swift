@@ -155,7 +155,7 @@ struct FanResponseSettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(title)
+                Text(L10n.text(title))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.gray)
                 Spacer()
@@ -188,7 +188,7 @@ struct RuleRowView: View {
                 
                 Picker("", selection: $rule.sensor) {
                     ForEach(TriggerRule.SensorType.allCases, id: \.self) { type in
-                        Text(type.rawValue).tag(type)
+                        Text(L10n.text(type.rawValue)).tag(type)
                     }
                 }
                 .pickerStyle(MenuPickerStyle())

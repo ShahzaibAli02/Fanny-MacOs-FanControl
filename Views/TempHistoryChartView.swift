@@ -31,11 +31,11 @@ struct TempHistoryChartView: View {
 
         var label: String {
             switch self {
-            case .thirtyMinutes: return "Last 30 min"
-            case .oneHour: return "Last hour"
-            case .twoHours: return "Last 2 hours"
-            case .twelveHours: return "Last 12 hours"
-            case .twentyFourHours: return "Last 24 hours"
+            case .thirtyMinutes: return L10n.text("Last 30 min")
+            case .oneHour: return L10n.text("Last hour")
+            case .twoHours: return L10n.text("Last 2 hours")
+            case .twelveHours: return L10n.text("Last 12 hours")
+            case .twentyFourHours: return L10n.text("Last 24 hours")
             }
         }
     }
@@ -79,9 +79,9 @@ struct TempHistoryChartView: View {
 
     private func sensorName(_ sensor: TriggerRule.SensorType) -> String {
         switch sensor {
-        case .cpu: return "CPU"
-        case .gpu: return "GPU"
-        case .battery: return "Battery"
+        case .cpu: return L10n.text("CPU")
+        case .gpu: return L10n.text("GPU")
+        case .battery: return L10n.text("Battery")
         }
     }
 
@@ -104,7 +104,7 @@ struct TempHistoryChartView: View {
     private func seriesName(_ series: ChartSeries) -> String {
         switch series {
         case .sensor(let sensor): return sensorName(sensor)
-        case .fanTarget: return "Fan target"
+        case .fanTarget: return L10n.text("Fan target")
         }
     }
 
@@ -224,7 +224,7 @@ struct TempHistoryChartView: View {
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .frame(width: 112)
-                .help("Choose the rolling time range shown in the graph")
+                .help(L10n.text("Choose the rolling time range shown in the graph"))
             }
 
             HStack(spacing: 10) {
@@ -252,7 +252,7 @@ struct TempHistoryChartView: View {
                 )
             } else {
                 HStack(spacing: 10) {
-                    Text(hoveredTime == nil ? "Now" : timeFormatter.string(from: hoveredTime!))
+                    Text(hoveredTime == nil ? L10n.text("Now") : timeFormatter.string(from: hoveredTime!))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.gray)
                         .frame(width: summaryLabelWidth, alignment: .leading)
@@ -411,7 +411,7 @@ struct TempHistoryChartView: View {
                 .foregroundColor(sensorColor(sensor))
         }
         .toggleStyle(CheckboxToggleStyle())
-        .help("Show \(sensorName(sensor)) temperature in the graph")
+        .help(L10n.format("Show %@ temperature in the graph", sensorName(sensor)))
     }
 
     private var fanTargetToggle: some View {
@@ -421,7 +421,7 @@ struct TempHistoryChartView: View {
                 .foregroundColor(.cyan)
         }
         .toggleStyle(CheckboxToggleStyle())
-        .help("Show the highest requested fan speed as a percentage")
+        .help(L10n.text("Show the highest requested fan speed as a percentage"))
     }
 
     private func emptyState(icon: String, message: String) -> some View {
@@ -429,7 +429,7 @@ struct TempHistoryChartView: View {
             Image(systemName: icon)
                 .font(.system(size: 18))
                 .foregroundColor(.gray.opacity(0.5))
-            Text(message)
+            Text(L10n.text(message))
                 .font(.system(size: 12))
                 .foregroundColor(.gray)
         }

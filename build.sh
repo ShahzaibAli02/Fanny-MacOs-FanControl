@@ -28,6 +28,7 @@ HELPER_SOURCES=(
 
 APP_SOURCES=(
     Core/SMC.swift
+    Core/Localization.swift
     Models/*.swift
     ViewModels/*.swift
     Views/*.swift
@@ -112,6 +113,16 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
     <string>2.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>fr</string>
+        <string>de</string>
+        <string>es</string>
+        <string>zh-Hans</string>
+    </array>
     <key>LSMinimumSystemVersion</key>
     <string>$MACOS_DEPLOYMENT_TARGET</string>
     <key>CFBundleIconFile</key>
@@ -125,6 +136,14 @@ if [ -f "app_icon.png" ]; then
     sips -s format png app_icon.png --out "$RESOURCES_DIR/AppIcon.png" >/dev/null
 else
     echo "Warning: app_icon.png not found. App bundle will use the default generic icon."
+fi
+
+if [ -d "Localization" ]; then
+    echo "Copying localizations..."
+    for localization_dir in Localization/*.lproj; do
+        [ -d "$localization_dir" ] || continue
+        cp -R "$localization_dir" "$RESOURCES_DIR/"
+    done
 fi
 
 echo "$APP_EXECUTABLE architectures: $(lipo -archs "$MACOS_DIR/$APP_EXECUTABLE")"

@@ -24,6 +24,8 @@ The principal changes are:
   UI CPU usage while keeping the fan indicator proportional and monotonic;
 - improve normal window behaviour, Dock presence, menu-bar reopening,
   responsive sizing, and compact notebook layouts; and
+- add native macOS localizations for English, French, German, Spanish, and
+  Simplified Chinese, including translated runtime-generated labels; and
 - add an opt-in, bounded CPU/Metal thermal-load utility for local comparisons.
 
 ## Safety and scope

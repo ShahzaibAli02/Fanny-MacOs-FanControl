@@ -38,13 +38,18 @@ struct FanControlApp: App {
         MenuBarExtra {
             Group {
                 ForEach(viewModel.fans) { fan in
-                    Button("\(fan.name): \(fan.currentSpeed) RPM (\(fan.mode == 1 ? "Manual" : "Auto"))") {
+                    Button(L10n.format(
+                        "%@ — %d RPM (%@)",
+                        fan.name,
+                        fan.currentSpeed,
+                        L10n.text(fan.mode == 1 ? "Manual" : "Auto")
+                    )) {
                         openMainWindow()
                     }
                 }
                 
                 if let battery = viewModel.batteryTemp {
-                    Button(String(format: "Battery Temp: %.1f°C", battery)) {
+                    Button(L10n.format("Battery temperature: %.1f°C", battery)) {
                         openMainWindow()
                     }
                 }

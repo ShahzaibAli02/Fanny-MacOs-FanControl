@@ -144,7 +144,7 @@ struct FanControlRow: View {
             sliderVal = val
             viewModel.changeFanSpeed(fanId: fan.id, speed: Int(val))
         }) {
-            Text(title)
+            Text(L10n.text(title))
                 .font(.system(size: compact ? 9 : 11, weight: .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)

@@ -21,6 +21,7 @@ addresses four practical areas:
 2. reliable sensor presentation and history;
 3. lower UI CPU use while retaining a live fan indicator; and
 4. usability of the app bundle, Dock presence, menu-bar access, and resizing.
+5. native macOS localization for the core interface.
 
 It does **not** claim to reproduce Apple's private SMC fan curve. Apple does
 not publish the M4 Pro's thresholds, sensor weights, or individual fan-to-zone
@@ -36,10 +37,25 @@ offers a return to the system's automatic controller.
 | Sensor reliability and app presence | `b2a2e5d` | Reject implausible sensor values; restore Dock icon and app activation. |
 | Resizable layout | `b6bb6bc` | Let the window and cards use available width with a safe minimum size. |
 | Monitoring/render CPU | `f365cdc`, `fc36392` | Removed continuous SwiftUI redraw paths and overlapping status reads. |
-| Integration update | this contribution | Core Animation indicator, fixed one-second thermal polling, cooling hysteresis, target deadband, cooling confirmation, command-rate limiter, multi-series history, and responsive UI. |
+| Integration update | this contribution | Core Animation indicator, fixed one-second thermal polling, cooling hysteresis, target deadband, cooling confirmation, command-rate limiter, multi-series history, responsive UI, and native localization. |
 
 The changes intentionally remain separable. A maintainer can review the
 automatic-control work independently from the UI and packaging work.
+
+## Native macOS localization (current working tree)
+
+The app bundle now ships standard `Localizable.strings` resources for English,
+French, German, Spanish, and Simplified Chinese. `build.sh` includes those
+`.lproj` resource directories in the app bundle and declares the same locale
+set in its `Info.plist`; macOS therefore selects the language using the user's
+system language order or a per-app language choice in System Settings.
+
+Static SwiftUI labels use normal framework localization. A small
+`Core/Localization.swift` wrapper is used only for labels constructed at
+runtime (for example, formatted menu-bar entries and dynamically selected
+sensor names), so those strings receive the same native lookup and English
+fallback. Translation maintenance instructions are in
+[`docs/LOCALIZATION.md`](LOCALIZATION.md).
 
 ## Automatic fan-control behaviour
 

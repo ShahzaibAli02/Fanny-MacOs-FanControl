@@ -127,7 +127,7 @@ class FanViewModel: ObservableObject {
     func authorize() {
         let path = helperPath
         guard FileManager.default.fileExists(atPath: path) else {
-            self.errorMessage = "Helper tool 'smc-helper' not found. Please verify project compilation."
+            self.errorMessage = L10n.text("Helper tool ‘smc-helper’ not found. Please verify project compilation.")
             return
         }
         
@@ -136,7 +136,7 @@ class FanViewModel: ObservableObject {
         """
         
         guard let appleScript = NSAppleScript(source: appleScriptSource) else {
-            self.errorMessage = "Failed to compile authorization script."
+            self.errorMessage = L10n.text("Failed to compile authorization script.")
             return
         }
         
@@ -146,9 +146,9 @@ class FanViewModel: ObservableObject {
             
             DispatchQueue.main.async {
                 if let err = error {
-                    let desc = err[NSAppleScript.errorMessage] as? String ?? "Authorization rejected or failed."
+                    let desc = err[NSAppleScript.errorMessage] as? String ?? L10n.text("Authorization rejected or failed.")
                     if desc.contains("Read-only file system") {
-                        self.errorMessage = "Please move Fan Control to your Applications folder before authorizing. The helper tool cannot be configured on a read-only disk image."
+                        self.errorMessage = L10n.text("Move Fan Control to Applications before authorizing. The helper tool can’t be configured on a read-only disk image.")
                     } else {
                         self.errorMessage = desc
                     }

@@ -23,6 +23,7 @@ It features a dual-component design: a sandboxed SwiftUI GUI front-end that comm
 - **Linked Fan Tuning**: Option to sync adjustments across all system fans simultaneously.
 - **System Metrics**: Monitors battery and sensor temperatures alongside active speed states.
 - **Safety Mode**: Instantly yields control back to macOS automatic management when closed or reset.
+- **Native macOS localization**: Automatically follows the system or per-app language setting, with English, French, German, Spanish, and Simplified Chinese included.
 
 ---
 
@@ -120,3 +121,6 @@ This project is open-source software licensed under the [MIT License](LICENSE).
 
 For the full change record, safety notes, local validation, and the proposed
 upstream pull-request split for this fork, see [docs/FORK_CHANGELOG.md](docs/FORK_CHANGELOG.md).
+
+Translation coverage and the standard macOS localization workflow are described
+in [docs/LOCALIZATION.md](docs/LOCALIZATION.md).
