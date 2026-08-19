@@ -20,6 +20,13 @@ Every directory contains `Localizable.strings`. The build script copies these
 directories into `Fan Control.app/Contents/Resources`, where macOS discovers
 them through the bundle's standard `CFBundleLocalizations` metadata.
 
+## Verification status
+
+The English and French interfaces have been manually verified in the app.
+German, Spanish, and Simplified Chinese are included for broader coverage, but
+they have **not** yet been tested in the app or reviewed by native speakers.
+They should be reviewed before presenting them as release-ready translations.
+
 ## Updating a translation
 
 1. Use the English file as the complete key list.

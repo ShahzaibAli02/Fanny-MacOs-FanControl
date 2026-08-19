@@ -57,6 +57,11 @@ sensor names), so those strings receive the same native lookup and English
 fallback. Translation maintenance instructions are in
 [`docs/LOCALIZATION.md`](LOCALIZATION.md).
 
+Only English and French have been manually verified in the running app.
+German, Spanish, and Simplified Chinese are included but remain pending
+in-app and native-speaker review; they must not be represented as validated
+release translations.
+
 ## Automatic fan-control behaviour
 
 ### Existing rule resolution preserved

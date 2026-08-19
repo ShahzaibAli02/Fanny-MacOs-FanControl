@@ -30,6 +30,10 @@ The principal changes are:
 
 ## Safety and scope
 
+- English and French are the only localization variants manually verified in
+  the running app. German, Spanish, and Simplified Chinese are included but
+  require in-app and native-speaker review before release.
+
 - The app always retains the existing **Reset All to Auto** path.
 - Temperature increases and high requests remain fast; cooling-side controls
   are used to reduce acoustic hunting rather than to delay a thermal rise.

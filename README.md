@@ -23,7 +23,7 @@ It features a dual-component design: a sandboxed SwiftUI GUI front-end that comm
 - **Linked Fan Tuning**: Option to sync adjustments across all system fans simultaneously.
 - **System Metrics**: Monitors battery and sensor temperatures alongside active speed states.
 - **Safety Mode**: Instantly yields control back to macOS automatic management when closed or reset.
-- **Native macOS localization**: Automatically follows the system or per-app language setting, with English, French, German, Spanish, and Simplified Chinese included.
+- **Native macOS localization**: Automatically follows the system or per-app language setting, with English, French, German, Spanish, and Simplified Chinese included. English and French have been manually verified; the other translations still need native-speaker review.
 
 ---
 
