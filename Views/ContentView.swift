@@ -146,6 +146,27 @@ struct ContentView: View {
                                     compactLayout: compactLayout
                                 )
                             }
+
+                            // Fan synchronization belongs directly with the fan cards:
+                            // it affects the two manual fan controls rather than the
+                            // independent automatic-rule configuration below.
+                            if viewModel.isAuthorized && viewModel.fans.count > 1 {
+                                HStack {
+                                    Toggle(isOn: $viewModel.linkedFans) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "link")
+                                                .foregroundColor(viewModel.linkedFans ? .teal : .gray)
+                                            Text("Sync All Fans Together")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    .toggleStyle(SwitchToggleStyle(tint: .teal))
+
+                                    Spacer()
+                                }
+                                .padding(.horizontal, compactLayout ? 4 : 8)
+                            }
                         }
                         .padding(.horizontal, horizontalPadding)
                         .frame(maxWidth: .infinity)
@@ -181,19 +202,7 @@ struct ContentView: View {
                             }
 
                             HStack {
-                                Toggle(isOn: $viewModel.linkedFans) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "link")
-                                            .foregroundColor(viewModel.linkedFans ? .teal : .gray)
-                                        Text("Sync All Fans Together")
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .toggleStyle(SwitchToggleStyle(tint: .teal))
-
                                 Spacer()
-
                                 Button(action: {
                                     viewModel.resetAll()
                                 }) {
