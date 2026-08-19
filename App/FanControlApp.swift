@@ -4,6 +4,7 @@ import AppKit
 @main
 struct FanControlApp: App {
     @StateObject private var viewModel = FanViewModel()
+    @Environment(\.scenePhase) private var scenePhase
     
     init() {
         // A foreground app owns a persistent Dock icon. Using `.accessory` hid the
@@ -22,6 +23,12 @@ struct FanControlApp: App {
         WindowGroup {
             ContentView(viewModel: viewModel)
                 .preferredColorScheme(.dark)
+                .onAppear {
+                    viewModel.setAppActive(scenePhase == .active)
+                }
+                .onChange(of: scenePhase) { newPhase in
+                    viewModel.setAppActive(newPhase == .active)
+                }
         }
         .windowStyle(HiddenTitleBarWindowStyle())
         .defaultSize(width: 760, height: 820)

@@ -56,6 +56,8 @@ class FanViewModel: ObservableObject {
     private let releaseToAutoPercent = 0.5
     
     private var timer: Timer? = nil
+    private var isAppActive = true
+    private var isStatusUpdateInProgress = false
     
     var helperPath: String {
         let bundleHelper = Bundle.main.bundlePath + "/Contents/MacOS/smc-helper"
@@ -137,15 +139,33 @@ class FanViewModel: ObservableObject {
     
     func startPolling() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+        let interval = pollingInterval
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.updateStatus()
         }
+        timer?.tolerance = interval * 0.2
         updateStatus()
+    }
+
+    func setAppActive(_ isActive: Bool) {
+        guard isAppActive != isActive else { return }
+        isAppActive = isActive
+        startPolling()
+    }
+
+    private var pollingInterval: TimeInterval {
+        if isAppActive {
+            return 1.5
+        }
+        // Rules still run while the app is hidden, but a slightly slower background
+        // cadence avoids repeatedly starting the privileged helper when it is idle.
+        return isRulesEngineEnabled ? 3.0 : 6.0
     }
     
     func updateStatus() {
         let path = helperPath
-        guard FileManager.default.fileExists(atPath: path) else { return }
+        guard FileManager.default.fileExists(atPath: path), !isStatusUpdateInProgress else { return }
+        isStatusUpdateInProgress = true
         
         DispatchQueue.global(qos: .default).async {
             let task = Process()
@@ -182,10 +202,18 @@ class FanViewModel: ObservableObject {
                         self.isPollingActive = true
                         self.evaluateRules()
                         self.recordHistoryIfNeeded()
+                        self.isStatusUpdateInProgress = false
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.isStatusUpdateInProgress = false
                     }
                 }
             } catch {
                 print("Status fetch failed: \(error)")
+                DispatchQueue.main.async {
+                    self.isStatusUpdateInProgress = false
+                }
             }
         }
     }
