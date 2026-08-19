@@ -137,6 +137,7 @@ struct ContentView: View {
                         .help("Click to toggle GPU temperature history")
                     }
                     .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity)
                     
                     if let sensor = selectedSensor {
                         TempHistoryChartView(
@@ -150,6 +151,7 @@ struct ContentView: View {
                         )
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.horizontal, 24)
+                        .frame(maxWidth: .infinity)
                     }
                     
                     // Privilege setup card if helper not authorized
@@ -213,6 +215,7 @@ struct ContentView: View {
                                 .stroke(Color.orange.opacity(0.2), lineWidth: 1)
                         )
                         .padding(.horizontal, 24)
+                        .frame(maxWidth: .infinity)
                     }
                     
                     // Global controls panel
@@ -275,6 +278,7 @@ struct ContentView: View {
                                 .stroke(Color.white.opacity(0.04), lineWidth: 1)
                         )
                         .padding(.horizontal, 24)
+                        .frame(maxWidth: .infinity)
                     }
                     
                     // Fans List
@@ -293,6 +297,7 @@ struct ContentView: View {
                             }
                         }
                         .padding(.horizontal, 24)
+                        .frame(maxWidth: .infinity)
                     }
                     
                     if viewModel.isAuthorized && !viewModel.fans.isEmpty {
@@ -300,12 +305,14 @@ struct ContentView: View {
                     }
                 }
                 .padding(.vertical, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(width: 580, height: 680)
+        .frame(minWidth: 600, maxWidth: .infinity, minHeight: 680, maxHeight: .infinity, alignment: .top)
         .background(Color(red: 0.08, green: 0.08, blue: 0.1))
         .background(WindowAccessor { window in
             window.delegate = MainWindowDelegate.shared
+            window.minSize = NSSize(width: 600, height: 680)
         })
     }
 }
@@ -332,7 +339,6 @@ class MainWindowDelegate: NSObject, NSWindowDelegate {
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
-        NSApplication.shared.setActivationPolicy(.accessory)
         return false
     }
 }

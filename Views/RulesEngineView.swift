@@ -67,6 +67,7 @@ struct RulesEngineView: View {
                 .stroke(viewModel.isRulesEngineEnabled ? Color.purple.opacity(0.2) : Color.white.opacity(0.04), lineWidth: 1)
         )
         .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

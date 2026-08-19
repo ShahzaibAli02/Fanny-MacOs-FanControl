@@ -111,6 +111,7 @@ struct FanControlRow: View {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
+        .frame(maxWidth: .infinity, alignment: .leading)
         // Keep slider synchronized with system status updates if user is not actively dragging it
         .onChange(of: fan.targetSpeed) { newTarget in
             if !isEditingSlider {

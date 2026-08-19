@@ -24,6 +24,7 @@ struct FanControlApp: App {
                 .preferredColorScheme(.dark)
         }
         .windowStyle(HiddenTitleBarWindowStyle())
+        .defaultSize(width: 760, height: 820)
         
         MenuBarExtra {
             Group {
