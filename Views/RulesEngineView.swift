@@ -28,6 +28,8 @@ struct RulesEngineView: View {
             
             if viewModel.isRulesEngineEnabled {
                 VStack(spacing: 12) {
+                    FanResponseSettingsView(viewModel: viewModel)
+
                     ForEach($viewModel.rules) { $rule in
                         RuleRowView(rule: $rule, onDelete: {
                             if let idx = viewModel.rules.firstIndex(where: { $0.id == rule.id }) {
@@ -65,6 +67,70 @@ struct RulesEngineView: View {
                 .stroke(viewModel.isRulesEngineEnabled ? Color.purple.opacity(0.2) : Color.white.opacity(0.04), lineWidth: 1)
         )
         .padding(.horizontal, 24)
+    }
+}
+
+struct FanResponseSettingsView: View {
+    @ObservedObject var viewModel: FanViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "gauge.with.dots.needle.33percent")
+                    .foregroundColor(.purple)
+                Text("Fan response")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
+            }
+
+            HStack(spacing: 16) {
+                responseControl(
+                    title: "Ramp up",
+                    value: $viewModel.rampUpTimeConstant,
+                    range: 0.5...5.0,
+                    step: 0.5,
+                    tint: .teal
+                )
+
+                responseControl(
+                    title: "Ramp down",
+                    value: $viewModel.rampDownTimeConstant,
+                    range: 1.0...30.0,
+                    step: 1.0,
+                    tint: .purple
+                )
+            }
+
+            Text("The target speed rises quickly and falls more gradually. A request of 90% or more is applied immediately.")
+                .font(.system(size: 10))
+                .foregroundColor(.gray)
+        }
+        .padding(12)
+        .background(Color.purple.opacity(0.06))
+        .cornerRadius(12)
+    }
+
+    private func responseControl(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        tint: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.gray)
+                Spacer()
+                Text("\(value.wrappedValue, specifier: "%.1f") s")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(tint)
+            }
+            Slider(value: value, in: range, step: step)
+                .accentColor(tint)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

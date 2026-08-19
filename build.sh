@@ -6,7 +6,7 @@ set -euo pipefail
 APP_NAME="Fan Control"
 APP_EXECUTABLE="FanControl"
 HELPER_EXECUTABLE="smc-helper"
-SIGNING_IDENTITY="Developer ID Application: Shahzaib Ali (VJ3BBPZBDU)"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application: Shahzaib Ali (VJ3BBPZBDU)}"
 
 APP_DIR="${APP_NAME}.app"
 CONTENTS_DIR="$APP_DIR/Contents"

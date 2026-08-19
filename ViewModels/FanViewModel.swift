@@ -26,15 +26,34 @@ class FanViewModel: ObservableObject {
     @Published var isRulesEngineEnabled: Bool = false {
         didSet {
             UserDefaults.standard.set(isRulesEngineEnabled, forKey: "isRulesEngineEnabled")
-            if !isRulesEngineEnabled && wasRuleApplied {
-                resetAll()
+            if !isRulesEngineEnabled {
+                if wasRuleApplied {
+                    resetAll()
+                }
                 wasRuleApplied = false
                 lastSetSpeedPercent = nil
+                resetRuleResponse()
             }
+        }
+    }
+    @Published var rampUpTimeConstant: Double = 1.0 {
+        didSet {
+            UserDefaults.standard.set(rampUpTimeConstant, forKey: "rampUpTimeConstant")
+        }
+    }
+    @Published var rampDownTimeConstant: Double = 10.0 {
+        didSet {
+            UserDefaults.standard.set(rampDownTimeConstant, forKey: "rampDownTimeConstant")
         }
     }
     private var wasRuleApplied = false
     private var lastSetSpeedPercent: Double? = nil
+    private var filteredRuleTargetPercent: Double? = nil
+    private var lastRuleEvaluationDate: Date? = nil
+
+    private let emergencyBypassPercent = 90.0
+    private let updateResolutionPercent = 1.0
+    private let releaseToAutoPercent = 0.5
     
     private var timer: Timer? = nil
     
@@ -49,6 +68,7 @@ class FanViewModel: ObservableObject {
     init() {
         checkAuthorization()
         loadRules()
+        loadResponseSettings()
         loadHistory()
         startPolling()
     }
@@ -260,6 +280,48 @@ class FanViewModel: ObservableObject {
             ]
         }
     }
+
+    private func loadResponseSettings() {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "rampUpTimeConstant") != nil {
+            rampUpTimeConstant = defaults.double(forKey: "rampUpTimeConstant")
+        }
+        if defaults.object(forKey: "rampDownTimeConstant") != nil {
+            rampDownTimeConstant = defaults.double(forKey: "rampDownTimeConstant")
+        }
+    }
+
+    private func resetRuleResponse() {
+        filteredRuleTargetPercent = nil
+        lastRuleEvaluationDate = nil
+    }
+
+    private func filteredRuleTarget(toward desiredPercent: Double, now: Date) -> Double {
+        defer { lastRuleEvaluationDate = now }
+
+        guard let previous = filteredRuleTargetPercent,
+              let previousDate = lastRuleEvaluationDate else {
+            // Apply the first demand immediately; this is the conservative choice.
+            filteredRuleTargetPercent = desiredPercent
+            return desiredPercent
+        }
+
+        // Do not delay a high-speed safety request.
+        if desiredPercent >= emergencyBypassPercent {
+            filteredRuleTargetPercent = desiredPercent
+            return desiredPercent
+        }
+
+        let elapsed = max(now.timeIntervalSince(previousDate), 0.01)
+        let timeConstant = desiredPercent > previous
+            ? rampUpTimeConstant
+            : rampDownTimeConstant
+        let alpha = 1.0 - exp(-elapsed / max(timeConstant, 0.01))
+        let filtered = previous + alpha * (desiredPercent - previous)
+
+        filteredRuleTargetPercent = filtered
+        return filtered
+    }
     
     func evaluateRules() {
         guard isRulesEngineEnabled else { return }
@@ -294,19 +356,24 @@ class FanViewModel: ObservableObject {
             }
         }
         
-        if let targetPercent = maxTargetPercent {
-            let speedFraction = targetPercent / 100.0
-            if !wasRuleApplied || lastSetSpeedPercent != targetPercent {
-                setAllToPercentage(speedFraction)
-                lastSetSpeedPercent = targetPercent
+        let desiredPercent = maxTargetPercent ?? 0.0
+        let filteredPercent = filteredRuleTarget(toward: desiredPercent, now: Date())
+
+        // When all rules clear, ramp down to the physical fan minimum first, then
+        // yield control back to macOS instead of switching to Auto abruptly.
+        if desiredPercent > 0.0 || filteredPercent > releaseToAutoPercent {
+            if !wasRuleApplied ||
+                lastSetSpeedPercent == nil ||
+                abs(filteredPercent - lastSetSpeedPercent!) >= updateResolutionPercent {
+                setAllToPercentage(min(max(filteredPercent, 0.0), 100.0) / 100.0)
+                lastSetSpeedPercent = filteredPercent
                 wasRuleApplied = true
             }
-        } else {
-            if wasRuleApplied {
-                resetAll()
-                wasRuleApplied = false
-                lastSetSpeedPercent = nil
-            }
+        } else if wasRuleApplied {
+            resetAll()
+            wasRuleApplied = false
+            lastSetSpeedPercent = nil
+            resetRuleResponse()
         }
     }
     

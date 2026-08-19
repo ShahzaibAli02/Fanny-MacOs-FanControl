@@ -17,6 +17,7 @@ It features a dual-component design: a sandboxed SwiftUI GUI front-end that comm
 
 - **Real-Time RPM Monitor**: Displays actual fan speeds with a custom rotating vector fan blade animation that responds to changes in RPM.
 - **Auto-Trigger Rules Engine**: Set custom, automated temperature rules for **CPU**, **GPU**, or **Battery** (e.g., _if CPU ≥ 75°C, override all fans to 80%_). Multiple active rules are evaluated dynamically, prioritizing the highest safety speed, and automatically returning control to macOS once the sensors cool down.
+- **Adjustable Fan Response**: Smooth automatic target changes with independent ramp-up and ramp-down time constants, persisted locally. Defaults are a 1-second ramp-up and a 10-second ramp-down; requests of 90% or more bypass smoothing.
 - **Manual Mode Controls**: Precise target speed adjustment sliders.
 - **Quick Presets**: Set speed thresholds instantly using the **Min**, **20%**, **50%**, **80%**, or **Max** buttons.
 - **Linked Fan Tuning**: Option to sync adjustments across all system fans simultaneously.
@@ -68,6 +69,12 @@ By default, the build script pins the app and helper binaries to macOS 13.0 and 
 
 ```bash
 MACOS_DEPLOYMENT_TARGET=14.0 ARCHS="arm64" ./build.sh
+```
+
+For a local build without the original developer's signing certificate, use an ad hoc signature:
+
+```bash
+ARCHS="arm64" SIGNING_IDENTITY="-" ./build.sh
 ```
 
 ---
