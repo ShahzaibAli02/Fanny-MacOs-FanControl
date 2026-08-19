@@ -80,7 +80,9 @@ func getStatus() {
     
     func getFirstValidTemp(keys: [String]) -> Double? {
         for key in keys {
-            if let val = smc.getValue(key), val > 0 && val < 150 {
+            // Ignore values outside a physically plausible die-temperature range.
+            // Some Apple Silicon SMC keys temporarily report tiny non-zero values.
+            if let val = smc.getValue(key), val >= 10 && val <= 115 {
                 return val
             }
         }

@@ -6,8 +6,16 @@ struct FanControlApp: App {
     @StateObject private var viewModel = FanViewModel()
     
     init() {
-        // Force the app to act as a normal foreground application with dock icon
-        NSApplication.shared.setActivationPolicy(.accessory)
+        // A foreground app owns a persistent Dock icon. Using `.accessory` hid the
+        // application from the Dock and made it difficult to bring back to the front.
+        NSApplication.shared.setActivationPolicy(.regular)
+
+        // The build keeps a PNG fallback in the bundle. This gives the Dock a custom
+        // icon even when an `.icns` conversion is unavailable on the build machine.
+        if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "png"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApplication.shared.applicationIconImage = icon
+        }
     }
     
     var body: some Scene {
@@ -71,7 +79,7 @@ struct FanControlApp: App {
             }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: "wind")
+                Image(systemName: "fanblades")
                 if let firstFan = viewModel.fans.first {
                     Text("\(firstFan.currentSpeed) RPM")
                 } else {
@@ -82,7 +90,6 @@ struct FanControlApp: App {
     }
     
     private func openMainWindow() {
-        NSApplication.shared.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         if let window = NSApplication.shared.windows.first {
             window.makeKeyAndOrderFront(nil)

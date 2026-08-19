@@ -164,9 +164,21 @@ class FanViewModel: ObservableObject {
                 if let decoded = try? JSONDecoder().decode(SystemStatusJSON.self, from: data) {
                     DispatchQueue.main.async {
                         self.fans = decoded.fans
-                        self.cpuTemp = decoded.cpuTemp
-                        self.gpuTemp = decoded.gpuTemp
-                        self.batteryTemp = decoded.batteryTemp
+                        self.cpuTemp = self.acceptTemperature(
+                            decoded.cpuTemp,
+                            previous: self.cpuTemp,
+                            sensor: .cpu
+                        )
+                        self.gpuTemp = self.acceptTemperature(
+                            decoded.gpuTemp,
+                            previous: self.gpuTemp,
+                            sensor: .gpu
+                        )
+                        self.batteryTemp = self.acceptTemperature(
+                            decoded.batteryTemp,
+                            previous: self.batteryTemp,
+                            sensor: .battery
+                        )
                         self.isPollingActive = true
                         self.evaluateRules()
                         self.recordHistoryIfNeeded()
@@ -397,6 +409,75 @@ class FanViewModel: ObservableObject {
     }
     
     // MARK: - Temperature History Management
+    private func temperatureBounds(for sensor: TriggerRule.SensorType) -> ClosedRange<Double> {
+        switch sensor {
+        case .cpu, .gpu:
+            return 10.0...115.0
+        case .battery:
+            return 5.0...70.0
+        }
+    }
+
+    private func maximumTemperatureStep(for sensor: TriggerRule.SensorType) -> Double {
+        switch sensor {
+        case .cpu, .gpu:
+            return 25.0
+        case .battery:
+            return 8.0
+        }
+    }
+
+    private func acceptTemperature(
+        _ candidate: Double?,
+        previous: Double?,
+        sensor: TriggerRule.SensorType
+    ) -> Double? {
+        guard let candidate,
+              candidate.isFinite,
+              temperatureBounds(for: sensor).contains(candidate) else {
+            return previous
+        }
+
+        // A read occurs every 1.5 seconds. Abrupt values are almost always a bad SMC
+        // key or a transient decoding failure, not a real silicon-temperature change.
+        if let previous,
+           abs(candidate - previous) > maximumTemperatureStep(for: sensor) {
+            return previous
+        }
+        return candidate
+    }
+
+    private func cleanHistory(_ records: [TempRecord]) -> [TempRecord] {
+        var previousCPU: Double? = nil
+        var previousGPU: Double? = nil
+        var previousBattery: Double? = nil
+
+        return records.map { record in
+            let cpu = cleanHistoricalTemperature(record.cpu, previous: &previousCPU, sensor: .cpu)
+            let gpu = cleanHistoricalTemperature(record.gpu, previous: &previousGPU, sensor: .gpu)
+            let battery = cleanHistoricalTemperature(record.battery, previous: &previousBattery, sensor: .battery)
+            return TempRecord(id: record.id, timestamp: record.timestamp, cpu: cpu, gpu: gpu, battery: battery)
+        }
+    }
+
+    private func cleanHistoricalTemperature(
+        _ candidate: Double?,
+        previous: inout Double?,
+        sensor: TriggerRule.SensorType
+    ) -> Double? {
+        guard let candidate,
+              candidate.isFinite,
+              temperatureBounds(for: sensor).contains(candidate) else {
+            return nil
+        }
+        if let previous,
+           abs(candidate - previous) > maximumTemperatureStep(for: sensor) {
+            return nil
+        }
+        previous = candidate
+        return candidate
+    }
+
     private func recordHistoryIfNeeded() {
         let now = Date()
         
@@ -430,8 +511,9 @@ class FanViewModel: ObservableObject {
     private func loadHistory() {
         if let data = UserDefaults.standard.data(forKey: "tempHistory"),
            let decoded = try? JSONDecoder().decode([TempRecord].self, from: data) {
-            self.tempHistory = decoded
-            self.lastHistoryRecordTime = decoded.last?.timestamp
+            self.tempHistory = cleanHistory(decoded)
+            self.lastHistoryRecordTime = self.tempHistory.last?.timestamp
+            saveHistory()
         }
     }
 }
