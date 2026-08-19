@@ -5,6 +5,13 @@ branch after the upstream base commit `60a57f3` (`Merge pull request #8 from
 leornt/fix/autostart`). It is written for maintainers reviewing a future pull
 request, not as a replacement for the main README.
 
+## Submission
+
+The integrated contribution is proposed upstream as
+[pull request #13](https://github.com/ShahzaibAli02/Fanny-MacOs-FanControl/pull/13).
+The accompanying reviewer-facing summary is kept in
+[`docs/UPSTREAM_PULL_REQUEST.md`](UPSTREAM_PULL_REQUEST.md).
+
 ## Purpose and scope
 
 This fork was tested on an Apple-silicon MacBook Pro with an M4 Pro. The work
