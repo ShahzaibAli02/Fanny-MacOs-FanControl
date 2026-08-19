@@ -159,17 +159,28 @@ codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$MACOS_DIR/$HELPE
 codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$MACOS_DIR/$APP_EXECUTABLE"
 codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$APP_DIR"
 
-# 8. Create DMG disk image
+# 8. Create a drag-and-drop DMG when possible. Some managed, sandboxed, or
+# headless environments cannot provide the device service required by hdiutil;
+# in that case, preserve the signed app in a Finder-installable ZIP instead.
 echo "Packaging to DMG..."
 rm -f "Fan Control.dmg"
+rm -f "Fan Control.zip"
+rm -rf dist
 mkdir -p dist
 cp -R "$APP_DIR" dist/
 # Add a symbolic link to /Applications for easy drag-and-drop installation
 ln -s /Applications dist/Applications
-hdiutil create -volname "Fan Control v2.0" -srcfolder dist -ov -format UDZO "Fan Control.dmg"
-rm -rf dist
 
-echo "Codesigning DMG..."
-codesign --force --sign "$SIGNING_IDENTITY" "Fan Control.dmg"
+if hdiutil create -volname "Fan Control v2.0" -srcfolder dist -ov -format UDZO "Fan Control.dmg"; then
+    rm -rf dist
+    echo "Codesigning DMG..."
+    codesign --force --sign "$SIGNING_IDENTITY" "Fan Control.dmg"
+    echo "=== Build and Packaging Complete: 'Fan Control.dmg' created successfully ==="
+else
+    rm -f "Fan Control.dmg"
+    rm -rf dist
 
-echo "=== Build and Packaging Complete: 'Fan Control.dmg' created successfully ==="
+    echo "Warning: DMG packaging failed; creating a ZIP fallback..."
+    ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "Fan Control.zip"
+    echo "=== Build and Packaging Complete: 'Fan Control.zip' created successfully ==="
+fi

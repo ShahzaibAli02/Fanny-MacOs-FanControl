@@ -327,10 +327,11 @@ signing as a first-class release concern.
 - Core Animation replaced the observed continuous SwiftUI drawing cost; manual
   interactive testing reported substantially lower idle/visible CPU use.
 
-The local build environment can fail while creating the optional DMG with
-`hdiutil` because no device service is available. This occurs after the usable
-`.app` bundle is built and signed, and is not evidence of an application build
-failure.
+The build script now falls back automatically to `Fan Control.zip` if `hdiutil`
+cannot create the optional DMG because no device service is available. The ZIP
+contains the same built and signed `.app` bundle and can be unzipped then moved
+to Applications. A successful DMG continues to be the preferred drag-and-drop
+installer.
 
 ## Known limitations and proposed follow-up
 

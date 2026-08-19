@@ -64,7 +64,7 @@ chmod +x build.sh
 ./build.sh
 ```
 
-This compiles `smc-helper` and `FanControl`, drafts the app metadata (`Info.plist`), and processes the visual assets to output a standard application bundle: **`Fan Control.app`**.
+This compiles `smc-helper` and `FanControl`, drafts the app metadata (`Info.plist`), and processes the visual assets to output a standard application bundle: **`Fan Control.app`**. It normally also creates **`Fan Control.dmg`**. If the local macOS environment cannot create a disk image, it creates **`Fan Control.zip`** instead; unzip it and move the app to Applications.
 
 By default, the build script pins the app and helper binaries to macOS 13.0 and creates a Universal 2 bundle for both Intel and Apple Silicon Macs. You can override those defaults when needed:
 

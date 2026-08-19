@@ -51,9 +51,8 @@ The principal changes are:
 - Interactive M4 Pro testing covered manual fan control, automatic rules,
   window resizing, background operation, history display, and CPU/Metal load
   transitions.
-- The optional DMG can fail in a sandboxed local environment after the usable,
-  signed `.app` has already been produced; this is an `hdiutil` environment
-  limitation rather than an app build failure.
+- If `hdiutil` cannot create a DMG in a sandboxed local environment, the build
+  automatically emits a ZIP containing the usable, signed `.app` instead.
 
 ## Review guidance
 
