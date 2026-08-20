@@ -6,7 +6,7 @@ set -euo pipefail
 APP_NAME="Fan Control"
 APP_EXECUTABLE="FanControl"
 HELPER_EXECUTABLE="smc-helper"
-SIGNING_IDENTITY="Developer ID Application: Shahzaib Ali (VJ3BBPZBDU)"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application: Shahzaib Ali (VJ3BBPZBDU)}"
 
 APP_DIR="${APP_NAME}.app"
 CONTENTS_DIR="$APP_DIR/Contents"
@@ -28,6 +28,7 @@ HELPER_SOURCES=(
 
 APP_SOURCES=(
     Core/SMC.swift
+    Core/Localization.swift
     Models/*.swift
     ViewModels/*.swift
     Views/*.swift
@@ -112,37 +113,37 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
     <string>2.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>fr</string>
+        <string>de</string>
+        <string>es</string>
+        <string>zh-Hans</string>
+    </array>
     <key>LSMinimumSystemVersion</key>
     <string>$MACOS_DEPLOYMENT_TARGET</string>
     <key>CFBundleIconFile</key>
-    <string>AppIcon.icns</string>
+    <string>AppIcon</string>
 </dict>
 </plist>
 EOF
 
 if [ -f "app_icon.png" ]; then
-    echo "Creating AppIcon.icns..."
-    iconset_dir="$BUILD_DIR/AppIcon.iconset"
-    rm -rf "$iconset_dir"
-    mkdir -p "$iconset_dir"
-
-    sips -s format png -z 16 16 app_icon.png --out "$iconset_dir/icon_16x16.png" >/dev/null
-    sips -s format png -z 32 32 app_icon.png --out "$iconset_dir/icon_16x16@2x.png" >/dev/null
-    sips -s format png -z 32 32 app_icon.png --out "$iconset_dir/icon_32x32.png" >/dev/null
-    sips -s format png -z 64 64 app_icon.png --out "$iconset_dir/icon_32x32@2x.png" >/dev/null
-    sips -s format png -z 128 128 app_icon.png --out "$iconset_dir/icon_128x128.png" >/dev/null
-    sips -s format png -z 256 256 app_icon.png --out "$iconset_dir/icon_128x128@2x.png" >/dev/null
-    sips -s format png -z 256 256 app_icon.png --out "$iconset_dir/icon_256x256.png" >/dev/null
-    sips -s format png -z 512 512 app_icon.png --out "$iconset_dir/icon_256x256@2x.png" >/dev/null
-    sips -s format png -z 512 512 app_icon.png --out "$iconset_dir/icon_512x512.png" >/dev/null
-    sips -s format png -z 1024 1024 app_icon.png --out "$iconset_dir/icon_512x512@2x.png" >/dev/null
-
-    if ! iconutil -c icns "$iconset_dir" -o "$RESOURCES_DIR/AppIcon.icns"; then
-        echo "Warning: unable to create AppIcon.icns. App bundle will use the default generic icon."
-        rm -f "$RESOURCES_DIR/AppIcon.icns"
-    fi
+    echo "Copying application icon..."
+    sips -s format png app_icon.png --out "$RESOURCES_DIR/AppIcon.png" >/dev/null
 else
-    echo "Warning: app_icon.png not found. App bundle will have default generic icon."
+    echo "Warning: app_icon.png not found. App bundle will use the default generic icon."
+fi
+
+if [ -d "Localization" ]; then
+    echo "Copying localizations..."
+    for localization_dir in Localization/*.lproj; do
+        [ -d "$localization_dir" ] || continue
+        cp -R "$localization_dir" "$RESOURCES_DIR/"
+    done
 fi
 
 echo "$APP_EXECUTABLE architectures: $(lipo -archs "$MACOS_DIR/$APP_EXECUTABLE")"
@@ -158,17 +159,28 @@ codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$MACOS_DIR/$HELPE
 codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$MACOS_DIR/$APP_EXECUTABLE"
 codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$APP_DIR"
 
-# 8. Create DMG disk image
+# 8. Create a drag-and-drop DMG when possible. Some managed, sandboxed, or
+# headless environments cannot provide the device service required by hdiutil;
+# in that case, preserve the signed app in a Finder-installable ZIP instead.
 echo "Packaging to DMG..."
 rm -f "Fan Control.dmg"
+rm -f "Fan Control.zip"
+rm -rf dist
 mkdir -p dist
 cp -R "$APP_DIR" dist/
 # Add a symbolic link to /Applications for easy drag-and-drop installation
 ln -s /Applications dist/Applications
-hdiutil create -volname "Fan Control v2.0" -srcfolder dist -ov -format UDZO "Fan Control.dmg"
-rm -rf dist
 
-echo "Codesigning DMG..."
-codesign --force --sign "$SIGNING_IDENTITY" "Fan Control.dmg"
+if hdiutil create -volname "Fan Control v2.0" -srcfolder dist -ov -format UDZO "Fan Control.dmg"; then
+    rm -rf dist
+    echo "Codesigning DMG..."
+    codesign --force --sign "$SIGNING_IDENTITY" "Fan Control.dmg"
+    echo "=== Build and Packaging Complete: 'Fan Control.dmg' created successfully ==="
+else
+    rm -f "Fan Control.dmg"
+    rm -rf dist
 
-echo "=== Build and Packaging Complete: 'Fan Control.dmg' created successfully ==="
+    echo "Warning: DMG packaging failed; creating a ZIP fallback..."
+    ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "Fan Control.zip"
+    echo "=== Build and Packaging Complete: 'Fan Control.zip' created successfully ==="
+fi

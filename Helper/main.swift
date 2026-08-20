@@ -80,14 +80,32 @@ func getStatus() {
     
     func getFirstValidTemp(keys: [String]) -> Double? {
         for key in keys {
-            if let val = smc.getValue(key), val > 0 && val < 150 {
+            // Ignore values outside a physically plausible die-temperature range.
+            // Some Apple Silicon SMC keys temporarily report tiny non-zero values.
+            if let val = smc.getValue(key), val >= 10 && val <= 115 {
                 return val
             }
         }
         return nil
     }
+
+    func getMaximumValidTemp(keys: [String]) -> Double? {
+        keys.compactMap { key -> Double? in
+            guard let value = smc.getValue(key),
+                  value.isFinite,
+                  value >= 10,
+                  value <= 115 else {
+                return nil
+            }
+            return value
+        }
+        .max()
+    }
     
-    let cpuTemp = getFirstValidTemp(keys: cpuKeys)
+    // CPU keys describe several plausible CPU-adjacent sensors. Using the
+    // highest valid reading is conservative for thermal control and avoids
+    // making the result depend on the first key that happens to respond.
+    let cpuTemp = getMaximumValidTemp(keys: cpuKeys)
     let gpuTemp = getFirstValidTemp(keys: gpuKeys)
     let batteryTemp = getFirstValidTemp(keys: batteryKeys)
     

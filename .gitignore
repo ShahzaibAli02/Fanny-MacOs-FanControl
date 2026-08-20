@@ -12,3 +12,7 @@ Thumbs.db
 
 # Installers / Packages
 *.dmg
+*.zip
+
+# Local thermal-load build output
+/tools/thermal-load/thermal-load

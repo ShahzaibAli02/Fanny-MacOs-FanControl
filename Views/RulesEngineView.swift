@@ -28,6 +28,8 @@ struct RulesEngineView: View {
             
             if viewModel.isRulesEngineEnabled {
                 VStack(spacing: 12) {
+                    FanResponseSettingsView(viewModel: viewModel)
+
                     ForEach($viewModel.rules) { $rule in
                         RuleRowView(rule: $rule, onDelete: {
                             if let idx = viewModel.rules.firstIndex(where: { $0.id == rule.id }) {
@@ -65,6 +67,106 @@ struct RulesEngineView: View {
                 .stroke(viewModel.isRulesEngineEnabled ? Color.purple.opacity(0.2) : Color.white.opacity(0.04), lineWidth: 1)
         )
         .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct FanResponseSettingsView: View {
+    @ObservedObject var viewModel: FanViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "gauge.with.dots.needle.33percent")
+                    .foregroundColor(.purple)
+                Text("Fan response")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
+            }
+
+            HStack(spacing: 16) {
+                responseControl(
+                    title: "Rise command rate",
+                    value: $viewModel.maximumCommandRiseRatePercentPerSecond,
+                    range: 0.5...10.0,
+                    step: 0.5,
+                    tint: .teal,
+                    unit: "%/s"
+                )
+
+                responseControl(
+                    title: "Fall command rate",
+                    value: $viewModel.maximumCommandFallRatePercentPerSecond,
+                    range: 0.5...10.0,
+                    step: 0.5,
+                    tint: .purple,
+                    unit: "%/s"
+                )
+            }
+
+            HStack(spacing: 16) {
+                responseControl(
+                    title: "Cooling hysteresis",
+                    value: $viewModel.coolingTemperatureHysteresis,
+                    range: 0.0...5.0,
+                    step: 0.5,
+                    tint: .orange,
+                    unit: "°C"
+                )
+
+                responseControl(
+                    title: "Min. target change",
+                    value: $viewModel.minimumCommandChangePercent,
+                    range: 1.0...5.0,
+                    step: 1.0,
+                    tint: .purple,
+                    unit: "%"
+                )
+            }
+
+            HStack {
+                responseControl(
+                    title: "Cooling confirmation",
+                    value: $viewModel.coolingConfirmationSeconds,
+                    range: 0.0...15.0,
+                    step: 1.0,
+                    tint: .blue,
+                    unit: "s"
+                )
+                Spacer()
+            }
+
+            Text("Temperature rises use the faster rise rate. A lower target must persist for the selected cooling confirmation time before the gentler fall rate begins; 0 s disables this hold. Requests of 90% or more are applied immediately.")
+                .font(.system(size: 10))
+                .foregroundColor(.gray)
+        }
+        .padding(12)
+        .background(Color.purple.opacity(0.06))
+        .cornerRadius(12)
+    }
+
+    private func responseControl(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        tint: Color,
+        unit: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(L10n.text(title))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.gray)
+                Spacer()
+                Text("\(value.wrappedValue, specifier: "%.1f") \(unit)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(tint)
+            }
+            Slider(value: value, in: range, step: step)
+                .accentColor(tint)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -86,7 +188,7 @@ struct RuleRowView: View {
                 
                 Picker("", selection: $rule.sensor) {
                     ForEach(TriggerRule.SensorType.allCases, id: \.self) { type in
-                        Text(type.rawValue).tag(type)
+                        Text(L10n.text(type.rawValue)).tag(type)
                     }
                 }
                 .pickerStyle(MenuPickerStyle())

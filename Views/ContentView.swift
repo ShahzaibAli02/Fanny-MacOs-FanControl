@@ -1,19 +1,23 @@
 import SwiftUI
-import AppKit
 
 // MARK: - Main Content View
 struct ContentView: View {
     @ObservedObject var viewModel: FanViewModel
-    @State private var selectedSensor: TriggerRule.SensorType? = nil
     
     var body: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geometry in
+            // Available window height, rather than the panel's pixel resolution,
+            // determines whether the first screen needs a more compact layout.
+            let compactLayout = geometry.size.height < 900
+            let horizontalPadding: CGFloat = compactLayout ? 16 : 24
+
+            VStack(spacing: 0) {
             // Title Header Bar
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Text("Fan Control Center")
-                            .font(.system(size: 20, weight: .black))
+                            .font(.system(size: compactLayout ? 18 : 20, weight: .black))
                             .foregroundColor(.white)
                         
                         Text("v2.0")
@@ -47,110 +51,18 @@ struct ContentView: View {
                     .cornerRadius(20)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 16)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.top, compactLayout ? 16 : 24)
+            .padding(.bottom, compactLayout ? 12 : 16)
             
             Divider()
                 .background(Color.white.opacity(0.08))
             
             ScrollView {
-                VStack(spacing: 20) {
-                    // Temperature Sensors Row
-                    HStack(spacing: 10) {
-                        TempMetricCard(
-                            title: "Battery",
-                            temp: viewModel.batteryTemp,
-                            iconName: "battery.100.bolt",
-                            iconColor: .green,
-                            isSelected: selectedSensor == .battery
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                if selectedSensor == .battery {
-                                    selectedSensor = nil
-                                } else {
-                                    selectedSensor = .battery
-                                }
-                            }
-                        }
-                        .onHover { inside in
-                            if inside {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
-                        .help("Click to toggle battery temperature history")
-                        
-                        TempMetricCard(
-                            title: "CPU Die",
-                            temp: viewModel.cpuTemp,
-                            iconName: "cpu",
-                            iconColor: .orange,
-                            isSelected: selectedSensor == .cpu
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                if selectedSensor == .cpu {
-                                    selectedSensor = nil
-                                } else {
-                                    selectedSensor = .cpu
-                                }
-                            }
-                        }
-                        .onHover { inside in
-                            if inside {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
-                        .help("Click to toggle CPU temperature history")
-                        
-                        TempMetricCard(
-                            title: "GPU proximity",
-                            temp: viewModel.gpuTemp,
-                            iconName: "gauge.with.needle",
-                            iconColor: .purple,
-                            isSelected: selectedSensor == .gpu
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                if selectedSensor == .gpu {
-                                    selectedSensor = nil
-                                } else {
-                                    selectedSensor = .gpu
-                                }
-                            }
-                        }
-                        .onHover { inside in
-                            if inside {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
-                        .help("Click to toggle GPU temperature history")
-                    }
-                    .padding(.horizontal, 24)
-                    
-                    if let sensor = selectedSensor {
-                        TempHistoryChartView(
-                            sensor: sensor,
-                            history: viewModel.tempHistory,
-                            onClose: {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    selectedSensor = nil
-                                }
-                            }
-                        )
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .padding(.horizontal, 24)
-                    }
+                VStack(spacing: compactLayout ? 14 : 20) {
+                    TempHistoryChartView(history: viewModel.tempHistory, compactLayout: compactLayout)
+                        .padding(.horizontal, horizontalPadding)
+                        .frame(maxWidth: .infinity)
                     
                     // Privilege setup card if helper not authorized
                     if !viewModel.isAuthorized {
@@ -212,10 +124,63 @@ struct ContentView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .stroke(Color.orange.opacity(0.2), lineWidth: 1)
                         )
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, horizontalPadding)
+                        .frame(maxWidth: .infinity)
                     }
-                    
-                    // Global controls panel
+
+                    // Fans List
+                    if viewModel.fans.isEmpty {
+                        VStack(spacing: 16) {
+                            ProgressView()
+                            Text("Reading SMC registers...")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                        .frame(height: 180)
+                    } else {
+                        VStack(spacing: 16) {
+                            ForEach(viewModel.fans) { fan in
+                                FanControlRow(
+                                    fan: fan,
+                                    viewModel: viewModel,
+                                    compactLayout: compactLayout
+                                )
+                            }
+
+                            // Fan synchronization belongs directly with the fan cards:
+                            // it affects the two manual fan controls rather than the
+                            // independent automatic-rule configuration below.
+                            if viewModel.isAuthorized && viewModel.fans.count > 1 {
+                                HStack {
+                                    Toggle(isOn: $viewModel.linkedFans) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "link")
+                                                .foregroundColor(viewModel.linkedFans ? .teal : .gray)
+                                            Text("Sync All Fans Together")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    .toggleStyle(SwitchToggleStyle(tint: .teal))
+
+                                    Spacer()
+                                }
+                                .padding(.horizontal, compactLayout ? 4 : 8)
+                            }
+                        }
+                        .padding(.horizontal, horizontalPadding)
+                        .frame(maxWidth: .infinity)
+                    }
+
+                    // Preserve the monitoring → manual fans → automatic-rules
+                    // reading order, while compact fan cards keep this section
+                    // discoverable on lower notebook displays.
+                    if viewModel.isAuthorized && !viewModel.fans.isEmpty {
+                        RulesEngineView(viewModel: viewModel)
+                    }
+
+                    // Secondary application-wide controls follow both the manual
+                    // and automatic cooling controls.
                     if viewModel.isAuthorized && !viewModel.fans.isEmpty {
                         VStack(spacing: 16) {
                             HStack {
@@ -230,26 +195,14 @@ struct ContentView: View {
                                 }
                                 .toggleStyle(SwitchToggleStyle(tint: .teal))
                                 .onChange(of: viewModel.isAutoStart) { newValue in
-                                    viewModel.toggleAutoStart(newValue);
+                                    viewModel.toggleAutoStart(newValue)
                                 }
-                                
+
                                 Spacer()
                             }
-                            
+
                             HStack {
-                                Toggle(isOn: $viewModel.linkedFans) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "link")
-                                            .foregroundColor(viewModel.linkedFans ? .teal : .gray)
-                                        Text("Sync All Fans Together")
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .toggleStyle(SwitchToggleStyle(tint: .teal))
-                                
                                 Spacer()
-                                
                                 Button(action: {
                                     viewModel.resetAll()
                                 }) {
@@ -274,38 +227,20 @@ struct ContentView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .stroke(Color.white.opacity(0.04), lineWidth: 1)
                         )
-                        .padding(.horizontal, 24)
-                    }
-                    
-                    // Fans List
-                    if viewModel.fans.isEmpty {
-                        VStack(spacing: 16) {
-                            ProgressView()
-                            Text("Reading SMC registers...")
-                                .font(.system(size: 12))
-                                .foregroundColor(.gray)
-                        }
-                        .frame(height: 180)
-                    } else {
-                        VStack(spacing: 16) {
-                            ForEach(viewModel.fans) { fan in
-                                FanControlRow(fan: fan, viewModel: viewModel)
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                    }
-                    
-                    if viewModel.isAuthorized && !viewModel.fans.isEmpty {
-                        RulesEngineView(viewModel: viewModel)
+                        .padding(.horizontal, horizontalPadding)
+                        .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(.vertical, 20)
+                .padding(.vertical, compactLayout ? 12 : 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(width: 580, height: 680)
+        }
+        .frame(minWidth: 600, maxWidth: .infinity, minHeight: 680, maxHeight: .infinity, alignment: .top)
         .background(Color(red: 0.08, green: 0.08, blue: 0.1))
         .background(WindowAccessor { window in
             window.delegate = MainWindowDelegate.shared
+            window.minSize = NSSize(width: 600, height: 680)
         })
     }
 }
@@ -332,7 +267,6 @@ class MainWindowDelegate: NSObject, NSWindowDelegate {
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
-        NSApplication.shared.setActivationPolicy(.accessory)
         return false
     }
 }

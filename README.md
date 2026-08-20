@@ -17,11 +17,13 @@ It features a dual-component design: a sandboxed SwiftUI GUI front-end that comm
 
 - **Real-Time RPM Monitor**: Displays actual fan speeds with a custom rotating vector fan blade animation that responds to changes in RPM.
 - **Auto-Trigger Rules Engine**: Set custom, automated temperature rules for **CPU**, **GPU**, or **Battery** (e.g., _if CPU ≥ 75°C, override all fans to 80%_). Multiple active rules are evaluated dynamically, prioritizing the highest safety speed, and automatically returning control to macOS once the sensors cool down.
+- **Stable Automatic Response**: Independently configurable rise (default 6%/s) and fall (default 3%/s) command rates, cooling hysteresis (default 5°C), a target deadband (default 4%), and an 8-second cooling confirmation reduce audible target hunting while retaining a prompt thermal response. Requests of 90% or more bypass the rate limit.
 - **Manual Mode Controls**: Precise target speed adjustment sliders.
 - **Quick Presets**: Set speed thresholds instantly using the **Min**, **20%**, **50%**, **80%**, or **Max** buttons.
 - **Linked Fan Tuning**: Option to sync adjustments across all system fans simultaneously.
 - **System Metrics**: Monitors battery and sensor temperatures alongside active speed states.
 - **Safety Mode**: Instantly yields control back to macOS automatic management when closed or reset.
+- **Native macOS localization**: Automatically follows the system or per-app language setting, with English, French, German, Spanish, and Simplified Chinese included. English and French have been manually verified; the other translations still need native-speaker review.
 
 ---
 
@@ -62,12 +64,18 @@ chmod +x build.sh
 ./build.sh
 ```
 
-This compiles `smc-helper` and `FanControl`, drafts the app metadata (`Info.plist`), and processes the visual assets to output a standard application bundle: **`Fan Control.app`**.
+This compiles `smc-helper` and `FanControl`, drafts the app metadata (`Info.plist`), and processes the visual assets to output a standard application bundle: **`Fan Control.app`**. It normally also creates **`Fan Control.dmg`**. If the local macOS environment cannot create a disk image, it creates **`Fan Control.zip`** instead; unzip it and move the app to Applications.
 
 By default, the build script pins the app and helper binaries to macOS 13.0 and creates a Universal 2 bundle for both Intel and Apple Silicon Macs. You can override those defaults when needed:
 
 ```bash
 MACOS_DEPLOYMENT_TARGET=14.0 ARCHS="arm64" ./build.sh
+```
+
+For a local build without the original developer's signing certificate, use an ad hoc signature:
+
+```bash
+ARCHS="arm64" SIGNING_IDENTITY="-" ./build.sh
 ```
 
 ---
@@ -108,3 +116,11 @@ To return your fans to macOS automatic controller management:
 ## 📄 License
 
 This project is open-source software licensed under the [MIT License](LICENSE).
+
+## Fork and upstream handoff notes
+
+For the full change record, safety notes, local validation, and the proposed
+upstream pull-request split for this fork, see [docs/FORK_CHANGELOG.md](docs/FORK_CHANGELOG.md).
+
+Translation coverage and the standard macOS localization workflow are described
+in [docs/LOCALIZATION.md](docs/LOCALIZATION.md).

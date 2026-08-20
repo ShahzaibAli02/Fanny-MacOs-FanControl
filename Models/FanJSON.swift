@@ -31,7 +31,7 @@ struct TriggerRule: Identifiable, Codable, Hashable {
     var minSpeedPercent: Double = 20.0
     var maxSpeedPercent: Double = 100.0
     
-    enum SensorType: String, Codable, CaseIterable {
+    enum SensorType: String, Codable, CaseIterable, Hashable {
         case cpu = "CPU"
         case gpu = "GPU"
         case battery = "Battery"
