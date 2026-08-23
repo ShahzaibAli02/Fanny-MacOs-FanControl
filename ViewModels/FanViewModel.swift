@@ -18,6 +18,17 @@ class FanViewModel: ObservableObject {
     @Published var errorMessage: String? = nil
     @Published var isPollingActive: Bool = false
     @Published var isAutoStart: Bool = SMAppService.mainApp.status == .enabled
+    @Published var runInAccessoryMode: Bool = UserDefaults.standard.bool(forKey: "runInAccessoryMode") {
+        didSet {
+            UserDefaults.standard.set(runInAccessoryMode, forKey: "runInAccessoryMode")
+            applyActivationPolicy()
+        }
+    }
+
+    private func applyActivationPolicy() {
+        let policy: NSApplication.ActivationPolicy = runInAccessoryMode ? .accessory : .regular
+        NSApplication.shared.setActivationPolicy(policy)
+    }
     
     @Published var rules: [TriggerRule] = [] {
         didSet {

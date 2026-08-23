@@ -48,6 +48,7 @@
 "Range" = "Rango";
 "Reading SMC registers..." = "Leyendo registros del SMC…";
 "Reset All to Auto" = "Restablecer todo a Auto";
+"Run in accessory mode" = "Ejecutar en modo accesorio";
 "Rise command rate" = "Velocidad de aumento del objetivo";
 "Select one or more series to display their history." = "Selecciona una o varias series para mostrar su historial.";
 "Set speed to" = "Establecer velocidad en";
