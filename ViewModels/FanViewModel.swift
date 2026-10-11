@@ -142,8 +142,16 @@ class FanViewModel: ObservableObject {
             return
         }
         
+        // The path is embedded as an escaped AppleScript string and quoted for the
+        // shell with `quoted form of`, so quotes or `$(...)` in the bundle path
+        // cannot inject commands into this root shell. Only the setuid bit is
+        // needed; setgid (`+s`) would also grant the wheel group.
+        let appleScriptPath = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
         let appleScriptSource = """
-        do shell script "chown root:wheel '\(path)' && chmod +s '\(path)'" with administrator privileges
+        set helperPath to "\(appleScriptPath)"
+        do shell script "chown root:wheel " & quoted form of helperPath & " && chmod u+s " & quoted form of helperPath with administrator privileges
         """
         
         guard let appleScript = NSAppleScript(source: appleScriptSource) else {
