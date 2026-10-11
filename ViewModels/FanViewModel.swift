@@ -24,6 +24,11 @@ class FanViewModel: ObservableObject {
             applyActivationPolicy()
         }
     }
+    @Published var showCPUTemperatureInMenuBar: Bool = UserDefaults.standard.object(forKey: "showCPUTemperatureInMenuBar") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(showCPUTemperatureInMenuBar, forKey: "showCPUTemperatureInMenuBar")
+        }
+    }
 
     private func applyActivationPolicy() {
         let policy: NSApplication.ActivationPolicy = runInAccessoryMode ? .accessory : .regular

@@ -66,3 +66,5 @@
 "Threshold" = "阈值";
 "to" = "至";
 "Target Speed" = "目标转速";
+"%.0f°C" = "%.0f°C";
+"Show CPU temperature in menu bar" = "在菜单栏中显示 CPU 温度";

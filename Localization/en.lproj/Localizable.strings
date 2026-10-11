@@ -65,3 +65,5 @@
 "to" = "to";
 "Target Speed" = "Target Speed";
 "Authorize & Enable Fan Adjustments" = "Authorize & Enable Fan Adjustments";
+"%.0f°C" = "%.0f°C";
+"Show CPU temperature in menu bar" = "Show CPU temperature in menu bar";
