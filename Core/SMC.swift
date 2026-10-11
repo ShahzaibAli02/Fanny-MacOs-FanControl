@@ -619,6 +619,13 @@ public class SMC {
             return result
         }
 
+        // The kernel call succeeds even when the key does not exist; the SMC
+        // reports that through `result` (e.g. 0x84). Treat it as a failed read
+        // instead of returning an empty, zero-sized value.
+        if output.result != 0x00 {
+            return kIOReturnError
+        }
+
         value.pointee.dataSize = UInt32(output.keyInfo.dataSize)
         value.pointee.dataType = output.keyInfo.dataType.toString()
         input.keyInfo.dataSize = output.keyInfo.dataSize
