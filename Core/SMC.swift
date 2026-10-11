@@ -629,7 +629,9 @@ public class SMC {
             return result
         }
 
-        memcpy(&value.pointee.bytes, &output.bytes, Int(value.pointee.dataSize))
+        // Never copy more than the 32-byte SMC payload, whatever size the key reports.
+        let byteCount = min(Int(value.pointee.dataSize), MemoryLayout.size(ofValue: output.bytes), value.pointee.bytes.count)
+        memcpy(&value.pointee.bytes, &output.bytes, byteCount)
         return kIOReturnSuccess
     }
 
