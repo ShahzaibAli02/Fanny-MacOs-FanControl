@@ -110,6 +110,36 @@ class FanViewModel: ObservableObject {
         loadResponseSettings()
         loadHistory()
         startPolling()
+        
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.restoreAutomaticControlBeforeQuit()
+        }
+    }
+    
+    /// Forced fan modes persist in the SMC after the app exits, so hand any
+    /// manually controlled fan back to the system before quitting. This runs
+    /// synchronously because the process ends as soon as the notification returns.
+    private func restoreAutomaticControlBeforeQuit() {
+        let path = helperPath
+        guard isAuthorized,
+              fans.contains(where: { $0.mode == 1 }),
+              FileManager.default.fileExists(atPath: path) else { return }
+        
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: path)
+        task.arguments = ["reset"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            print("Reset on quit failed: \(error)")
+        }
     }
     
     func checkAuthorization() {
