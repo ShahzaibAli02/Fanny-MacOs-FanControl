@@ -66,3 +66,5 @@
 "to" = "a";
 "Target Speed" = "Velocidad objetivo";
 "Authorize & Enable Fan Adjustments" = "Autorizar y activar los ajustes de ventiladores";
+"%.0f°C" = "%.0f °C";
+"Show CPU temperature in menu bar" = "Mostrar la temperatura de la CPU en la barra de menús";

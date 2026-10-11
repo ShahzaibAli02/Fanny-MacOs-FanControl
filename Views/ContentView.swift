@@ -217,6 +217,21 @@ struct ContentView: View {
                             }
 
                             HStack {
+                                Toggle(isOn: $viewModel.showCPUTemperatureInMenuBar) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "thermometer.medium")
+                                            .foregroundColor(viewModel.showCPUTemperatureInMenuBar ? .teal : .gray)
+                                        Text(L10n.text("Show CPU temperature in menu bar"))
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                                .toggleStyle(SwitchToggleStyle(tint: .teal))
+
+                                Spacer()
+                            }
+
+                            HStack {
                                 Spacer()
                                 Button(action: {
                                     viewModel.resetAll()

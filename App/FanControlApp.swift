@@ -92,12 +92,19 @@ struct FanControlApp: App {
             HStack(spacing: 4) {
                 Image(systemName: "fanblades")
                 if let firstFan = viewModel.fans.first {
-                    Text("\(firstFan.currentSpeed) RPM")
+                    Text("\(firstFan.currentSpeed) RPM" + menuBarCPUTemperatureSuffix)
                 } else {
                     Text("Fan Control")
                 }
             }
         }
+    }
+    
+    /// Appended to the menu bar RPM, e.g. "1702 RPM · 47°C". Kept in the same
+    /// Text view because a MenuBarExtra label may not render several Text views.
+    private var menuBarCPUTemperatureSuffix: String {
+        guard viewModel.showCPUTemperatureInMenuBar, let cpuTemp = viewModel.cpuTemp else { return "" }
+        return " · " + L10n.format("%.0f°C", cpuTemp)
     }
     
     private func openMainWindow() {

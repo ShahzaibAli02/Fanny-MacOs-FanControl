@@ -65,3 +65,5 @@
 "to" = "bis";
 "Target Speed" = "Zieldrehzahl";
 "Authorize & Enable Fan Adjustments" = "Autorisieren und Lüfteranpassungen aktivieren";
+"%.0f°C" = "%.0f °C";
+"Show CPU temperature in menu bar" = "CPU-Temperatur in der Menüleiste anzeigen";
