@@ -65,3 +65,5 @@
 "to" = "to";
 "Target Speed" = "Target Speed";
 "Authorize & Enable Fan Adjustments" = "Authorize & Enable Fan Adjustments";
+"Fan command failed: %@" = "Fan command failed: %@";
+"The helper exited with an error." = "The helper exited with an error.";

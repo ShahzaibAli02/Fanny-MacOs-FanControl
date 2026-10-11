@@ -16,6 +16,7 @@ class FanViewModel: ObservableObject {
     @Published var isAuthorized: Bool = false
     @Published var linkedFans: Bool = false
     @Published var errorMessage: String? = nil
+    @Published var fanCommandError: String? = nil
     @Published var isPollingActive: Bool = false
     @Published var isAutoStart: Bool = SMAppService.mainApp.status == .enabled
     @Published var runInAccessoryMode: Bool = UserDefaults.standard.bool(forKey: "runInAccessoryMode") {
@@ -109,6 +110,36 @@ class FanViewModel: ObservableObject {
         loadResponseSettings()
         loadHistory()
         startPolling()
+        
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.restoreAutomaticControlBeforeQuit()
+        }
+    }
+    
+    /// Forced fan modes persist in the SMC after the app exits, so hand any
+    /// manually controlled fan back to the system before quitting. This runs
+    /// synchronously because the process ends as soon as the notification returns.
+    private func restoreAutomaticControlBeforeQuit() {
+        let path = helperPath
+        guard isAuthorized,
+              fans.contains(where: { $0.mode == 1 }),
+              FileManager.default.fileExists(atPath: path) else { return }
+        
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: path)
+        task.arguments = ["reset"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            print("Reset on quit failed: \(error)")
+        }
     }
     
     func checkAuthorization() {
@@ -253,29 +284,54 @@ class FanViewModel: ObservableObject {
     }
     
     func setFanMode(fanId: Int, mode: Int, speed: Int? = nil) {
+        var args = ["set", "\(fanId)", "\(mode)"]
+        if mode == 1, let spd = speed {
+            args.append("\(spd)")
+        }
+        runFanCommand(args)
+    }
+    
+    /// Runs a state-changing helper command and surfaces a non-zero exit through
+    /// `fanCommandError`, so a rejected SMC write is not silently ignored.
+    private func runFanCommand(_ arguments: [String]) {
         let path = helperPath
         guard FileManager.default.fileExists(atPath: path) else { return }
         
         DispatchQueue.global(qos: .userInitiated).async {
             let task = Process()
             task.executableURL = URL(fileURLWithPath: path)
+            task.arguments = arguments
             
-            var args = ["set", "\(fanId)", "\(mode)"]
-            if mode == 1, let spd = speed {
-                args.append("\(spd)")
-            }
-            task.arguments = args
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            task.standardError = pipe
             
             do {
                 try task.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 task.waitUntilExit()
+                
+                let output = String(data: data, encoding: .utf8) ?? ""
+                let failure = task.terminationStatus == 0 ? nil : Self.helperFailureDetail(output)
                 DispatchQueue.main.async {
+                    self.fanCommandError = failure.map { L10n.format("Fan command failed: %@", $0) }
                     self.updateStatus()
                 }
             } catch {
-                print("Set fan failed: \(error)")
+                print("Fan command \(arguments) failed: \(error)")
             }
         }
+    }
+    
+    private static func helperFailureDetail(_ output: String) -> String {
+        let lines = output
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        if let error = lines.last(where: { $0.hasPrefix("ERROR:") }) {
+            return String(error.dropFirst("ERROR:".count)).trimmingCharacters(in: .whitespaces)
+        }
+        return lines.last ?? L10n.text("The helper exited with an error.")
     }
     
     func changeFanMode(fanId: Int, mode: Int) {
@@ -305,24 +361,7 @@ class FanViewModel: ObservableObject {
     }
     
     func resetAll() {
-        let path = helperPath
-        guard FileManager.default.fileExists(atPath: path) else { return }
-        
-        DispatchQueue.global(qos: .userInitiated).async {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: path)
-            task.arguments = ["reset"]
-            
-            do {
-                try task.run()
-                task.waitUntilExit()
-                DispatchQueue.main.async {
-                    self.updateStatus()
-                }
-            } catch {
-                print("Reset failed: \(error)")
-            }
-        }
+        runFanCommand(["reset"])
     }
     
     func setAllToPercentage(_ pct: Double) {

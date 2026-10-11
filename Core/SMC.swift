@@ -365,7 +365,9 @@ public class SMC {
         }
         #else
         // Intel
+        var hasPerFanModeKey = false
         if self.getValue("F\(id)Md") != nil {
+            hasPerFanModeKey = true
             var result: kern_return_t = 0
             var value = SMCVal_t("F\(id)Md")
 
@@ -387,6 +389,13 @@ public class SMC {
                 print("Error write: " + (String(cString: mach_error_string(result), encoding: String.Encoding.ascii) ?? "unknown error"))
                 return false
             }
+        }
+
+        // Newer Intel Macs (e.g. T2 models such as Macmini8,1) have no FS! key;
+        // the per-fan F{id}Md key written above is the only mode switch there.
+        var fsProbe = SMCVal_t("FS! ")
+        if read(&fsProbe) != kIOReturnSuccess || fsProbe.dataSize == 0 {
+            return hasPerFanModeKey
         }
 
         let fansMode = Int(self.getValue("FS! ") ?? 0)
@@ -617,6 +626,13 @@ public class SMC {
         result = call(SMCKeys.kernelIndex.rawValue, input: &input, output: &output)
         if result != kIOReturnSuccess {
             return result
+        }
+
+        // The kernel call succeeds even when the key does not exist; the SMC
+        // reports that through `result` (e.g. 0x84). Treat it as a failed read
+        // instead of returning an empty, zero-sized value.
+        if output.result != 0x00 {
+            return kIOReturnError
         }
 
         value.pointee.dataSize = UInt32(output.keyInfo.dataSize)
