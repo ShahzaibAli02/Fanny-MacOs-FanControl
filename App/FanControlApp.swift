@@ -50,6 +50,12 @@ struct FanControlApp: App {
                     }
                 }
                 
+                if let fanError = viewModel.fanCommandError {
+                    Button("⚠︎ " + fanError) {
+                        openMainWindow()
+                    }
+                }
+                
                 Divider()
                 
                 Button("Open Fan Control Center...") {

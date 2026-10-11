@@ -65,3 +65,5 @@
 "to" = "bis";
 "Target Speed" = "Zieldrehzahl";
 "Authorize & Enable Fan Adjustments" = "Autorisieren und Lüfteranpassungen aktivieren";
+"Fan command failed: %@" = "Lüfterbefehl fehlgeschlagen: %@";
+"The helper exited with an error." = "Das Hilfsprogramm wurde mit einem Fehler beendet.";

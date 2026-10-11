@@ -128,6 +128,20 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity)
                     }
 
+                    if viewModel.isAuthorized, let fanError = viewModel.fanCommandError {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text(fanError)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.red)
+                        .padding(10)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
+                        .padding(.horizontal, horizontalPadding)
+                    }
+
                     // Fans List
                     if viewModel.fans.isEmpty {
                         VStack(spacing: 16) {

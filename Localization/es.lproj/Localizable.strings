@@ -66,3 +66,5 @@
 "to" = "a";
 "Target Speed" = "Velocidad objetivo";
 "Authorize & Enable Fan Adjustments" = "Autorizar y activar los ajustes de ventiladores";
+"Fan command failed: %@" = "Error en el comando del ventilador: %@";
+"The helper exited with an error." = "La herramienta auxiliar terminó con un error.";
