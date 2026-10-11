@@ -143,20 +143,26 @@ func setFan(fanId: Int, mode: Int, speed: Int?) {
             exit(1)
         }
         
+        // A failure part-way through can leave the fan forced at a low target.
+        // Hand control back to the system rather than leaving it stuck there.
+        func restoreAutomaticAndExit(_ message: String) -> Never {
+            let restored = smc.setFanMode(fanId, mode: .automatic)
+            print("ERROR: \(message)" + (restored ? " (restored Automatic)" : " (could not restore Automatic)"))
+            exit(1)
+        }
+
         // 1. Set mode to forced
         let modeSuccess = smc.setFanMode(fanId, mode: .forced)
         guard modeSuccess else {
-            print("ERROR: Failed to set Fan \(fanId) mode to Manual")
-            exit(1)
+            restoreAutomaticAndExit("Failed to set Fan \(fanId) mode to Manual")
         }
-        
+
         // 2. Set speed
         let speedSuccess = smc.setFanSpeed(fanId, speed: targetSpeed)
         if speedSuccess {
             print("SUCCESS: Fan \(fanId) set to Manual (\(targetSpeed) RPM)")
         } else {
-            print("ERROR: Failed to set Fan \(fanId) speed to \(targetSpeed) RPM")
-            exit(1)
+            restoreAutomaticAndExit("Failed to set Fan \(fanId) speed to \(targetSpeed) RPM")
         }
     } else {
         print("ERROR: Invalid mode. Use 0 for auto, 1 for manual.")
