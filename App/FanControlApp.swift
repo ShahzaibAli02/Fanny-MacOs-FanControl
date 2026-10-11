@@ -7,12 +7,7 @@ struct FanControlApp: App {
     @Environment(\.scenePhase) private var scenePhase
     
     init() {
-        // A foreground app owns a persistent Dock icon. Using `.accessory` hid the
-        // application from the Dock and made it difficult to bring back to the front.
-        NSApplication.shared.setActivationPolicy(.regular)
-
-        // The build keeps a PNG fallback in the bundle. This gives the Dock a custom
-        // icon even when an `.icns` conversion is unavailable on the build machine.
+        // Keep the app launchable without assuming one activation policy.
         if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "png"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = icon
@@ -25,14 +20,15 @@ struct FanControlApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     viewModel.setAppActive(scenePhase == .active)
+                    if viewModel.runInAccessoryMode {
+                        NSApplication.shared.setActivationPolicy(.accessory)
+                    }
                 }
                 .onChange(of: scenePhase) { newPhase in
                     viewModel.setAppActive(newPhase == .active)
                 }
         }
         .windowStyle(HiddenTitleBarWindowStyle())
-        // macOS constrains this to the usable display automatically. A taller
-        // default gives the first window enough room to reveal auto controls.
         .defaultSize(width: 960, height: 900)
         
         MenuBarExtra {

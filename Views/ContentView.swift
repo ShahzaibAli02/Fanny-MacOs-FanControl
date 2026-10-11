@@ -188,7 +188,7 @@ struct ContentView: View {
                                     HStack(spacing: 6) {
                                         Image(systemName: "autostartstop")
                                             .foregroundColor(viewModel.isAutoStart ? .teal : .gray)
-                                        Text("Start at login (background)")
+                                        Text(L10n.text("Start at login (background)"))
                                             .font(.system(size: 13, weight: .bold))
                                             .foregroundColor(.white)
                                     }
@@ -197,6 +197,21 @@ struct ContentView: View {
                                 .onChange(of: viewModel.isAutoStart) { newValue in
                                     viewModel.toggleAutoStart(newValue)
                                 }
+
+                                Spacer()
+                            }
+
+                            HStack {
+                                Toggle(isOn: $viewModel.runInAccessoryMode) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "square.dashed")
+                                            .foregroundColor(viewModel.runInAccessoryMode ? .teal : .gray)
+                                        Text(L10n.text("Run in accessory mode"))
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                                .toggleStyle(SwitchToggleStyle(tint: .teal))
 
                                 Spacer()
                             }
