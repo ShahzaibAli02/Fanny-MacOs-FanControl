@@ -83,7 +83,16 @@ struct FanControlApp: App {
                 }
                 
                 Divider()
-                
+
+                Menu("Show in Menu Bar") {
+                    Toggle("Fan Speed", isOn: $viewModel.menuBarShowsFanSpeed)
+                    Toggle("CPU Temperature", isOn: $viewModel.menuBarShowsCPUTemp)
+                    Toggle("GPU Temperature", isOn: $viewModel.menuBarShowsGPUTemp)
+                    Toggle("Battery Temperature", isOn: $viewModel.menuBarShowsBatteryTemp)
+                }
+
+                Divider()
+
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
                 }
@@ -91,10 +100,8 @@ struct FanControlApp: App {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "fanblades")
-                if let firstFan = viewModel.fans.first {
-                    Text("\(firstFan.currentSpeed) RPM")
-                } else {
-                    Text("Fan Control")
+                if let title = viewModel.menuBarTitle {
+                    Text(verbatim: title)
                 }
             }
         }

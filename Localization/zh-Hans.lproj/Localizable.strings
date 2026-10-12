@@ -66,3 +66,14 @@
 "Threshold" = "阈值";
 "to" = "至";
 "Target Speed" = "目标转速";
+
+/* Menu bar display options */
+"Show in Menu Bar" = "在菜单栏中显示";
+"Fan Speed" = "风扇转速";
+"CPU Temperature" = "CPU 温度";
+"GPU Temperature" = "GPU 温度";
+"Battery Temperature" = "电池温度";
+"%d RPM" = "%d 转/分";
+"%@ %.0f°" = "%@ %.0f°";
+"%@ --°" = "%@ --°";
+"BAT" = "电池";

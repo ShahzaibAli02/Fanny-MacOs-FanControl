@@ -65,3 +65,14 @@
 "to" = "to";
 "Target Speed" = "Target Speed";
 "Authorize & Enable Fan Adjustments" = "Authorize & Enable Fan Adjustments";
+
+/* Menu bar display options */
+"Show in Menu Bar" = "Show in Menu Bar";
+"Fan Speed" = "Fan Speed";
+"CPU Temperature" = "CPU Temperature";
+"GPU Temperature" = "GPU Temperature";
+"Battery Temperature" = "Battery Temperature";
+"%d RPM" = "%d RPM";
+"%@ %.0f°" = "%@ %.0f°";
+"%@ --°" = "%@ --°";
+"BAT" = "BAT";
