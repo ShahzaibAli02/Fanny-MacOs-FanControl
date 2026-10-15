@@ -441,7 +441,8 @@ public class SMC {
 
     public func setFanSpeed(_ id: Int, speed: Int) -> Bool {
         guard let maxSpeed = self.getValue("F\(id)Mx") else { return false }
-        let targetSpeed = min(speed, Int(maxSpeed))
+        let minSpeed = Int(self.getValue("F\(id)Mn") ?? 0)
+        let targetSpeed = max(min(speed, Int(maxSpeed)), minSpeed)
 
         #if arch(arm64)
         var modeVal = SMCVal_t(fanModeKey(id))
@@ -629,7 +630,9 @@ public class SMC {
             return result
         }
 
-        memcpy(&value.pointee.bytes, &output.bytes, Int(value.pointee.dataSize))
+        // Never copy more than the 32-byte SMC payload, whatever size the key reports.
+        let byteCount = min(Int(value.pointee.dataSize), MemoryLayout.size(ofValue: output.bytes), value.pointee.bytes.count)
+        memcpy(&value.pointee.bytes, &output.bytes, byteCount)
         return kIOReturnSuccess
     }
 

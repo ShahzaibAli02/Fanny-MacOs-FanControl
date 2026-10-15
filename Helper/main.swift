@@ -186,7 +186,18 @@ func main() {
             print("ERROR: Invalid fanId or mode")
             exit(1)
         }
+        // This runs as root and any local user can invoke it, so only accept
+        // fans that exist and positive speeds (setFanSpeed clamps to min/max).
+        let fanCount = Int(SMC.shared.getValue("FNum") ?? 0)
+        guard (0..<fanCount).contains(fanId) else {
+            print("ERROR: Invalid fanId \(fanId); this Mac has \(fanCount) fan(s)")
+            exit(1)
+        }
         let speed = args.count > 4 ? Int(args[4]) : nil
+        if let speed, speed <= 0 {
+            print("ERROR: Speed must be a positive RPM value")
+            exit(1)
+        }
         setFan(fanId: fanId, mode: mode, speed: speed)
     case "reset":
         let success = SMC.shared.resetFanControl()
