@@ -65,3 +65,14 @@
 "to" = "à";
 "Target Speed" = "Vitesse cible";
 "Authorize & Enable Fan Adjustments" = "Autoriser et activer le réglage des ventilateurs";
+
+/* Menu bar display options */
+"Show in Menu Bar" = "Afficher dans la barre des menus";
+"Fan Speed" = "Vitesse du ventilateur";
+"CPU Temperature" = "Température du CPU";
+"GPU Temperature" = "Température du GPU";
+"Battery Temperature" = "Température de la batterie";
+"%d RPM" = "%d tr/min";
+"%@ %.0f°" = "%@ %.0f°";
+"%@ --°" = "%@ --°";
+"BAT" = "BAT";

@@ -25,6 +25,55 @@ class FanViewModel: ObservableObject {
         }
     }
 
+    // Menu bar label contents. Fan speed defaults on to match the original label.
+    @Published var menuBarShowsFanSpeed: Bool = UserDefaults.standard.object(forKey: "menuBarShowsFanSpeed") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(menuBarShowsFanSpeed, forKey: "menuBarShowsFanSpeed")
+        }
+    }
+    @Published var menuBarShowsCPUTemp: Bool = UserDefaults.standard.bool(forKey: "menuBarShowsCPUTemp") {
+        didSet {
+            UserDefaults.standard.set(menuBarShowsCPUTemp, forKey: "menuBarShowsCPUTemp")
+        }
+    }
+    @Published var menuBarShowsGPUTemp: Bool = UserDefaults.standard.bool(forKey: "menuBarShowsGPUTemp") {
+        didSet {
+            UserDefaults.standard.set(menuBarShowsGPUTemp, forKey: "menuBarShowsGPUTemp")
+        }
+    }
+    @Published var menuBarShowsBatteryTemp: Bool = UserDefaults.standard.bool(forKey: "menuBarShowsBatteryTemp") {
+        didSet {
+            UserDefaults.standard.set(menuBarShowsBatteryTemp, forKey: "menuBarShowsBatteryTemp")
+        }
+    }
+
+    /// Text shown next to the menu bar icon, or nil to show the icon alone.
+    var menuBarTitle: String? {
+        var parts: [String] = []
+
+        if menuBarShowsFanSpeed, let firstFan = fans.first {
+            parts.append(L10n.format("%d RPM", firstFan.currentSpeed))
+        }
+
+        func appendTemperature(_ label: String, _ value: Double?) {
+            if let value {
+                parts.append(L10n.format("%@ %.0f°", L10n.text(label), value))
+            } else {
+                parts.append(L10n.format("%@ --°", L10n.text(label)))
+            }
+        }
+
+        if menuBarShowsCPUTemp { appendTemperature("CPU", cpuTemp) }
+        if menuBarShowsGPUTemp { appendTemperature("GPU", gpuTemp) }
+        if menuBarShowsBatteryTemp { appendTemperature("BAT", batteryTemp) }
+
+        if parts.isEmpty {
+            // Fan speed selected but no fan data yet: keep the original placeholder.
+            return menuBarShowsFanSpeed ? L10n.text("Fan Control") : nil
+        }
+        return parts.joined(separator: "  ")
+    }
+
     private func applyActivationPolicy() {
         let policy: NSApplication.ActivationPolicy = runInAccessoryMode ? .accessory : .regular
         NSApplication.shared.setActivationPolicy(policy)
