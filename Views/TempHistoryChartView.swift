@@ -3,7 +3,6 @@ import Charts
 
 struct TempHistoryChartView: View {
     private let summaryLabelWidth: CGFloat = 48
-    private let summaryColumnWidth: CGFloat = 148
 
     enum ChartSeries: Hashable {
         case sensor(TriggerRule.SensorType)
@@ -230,15 +229,16 @@ struct TempHistoryChartView: View {
             HStack(spacing: 10) {
                 Color.clear.frame(width: summaryLabelWidth, height: 1)
                 sensorToggle(.cpu, isOn: $showCPUHistory)
-                    .frame(width: summaryColumnWidth, alignment: .leading)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 sensorToggle(.gpu, isOn: $showGPUHistory)
-                    .frame(width: summaryColumnWidth, alignment: .leading)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 sensorToggle(.battery, isOn: $showBatteryHistory)
-                    .frame(width: summaryColumnWidth, alignment: .leading)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 fanTargetToggle
-                    .frame(width: summaryColumnWidth, alignment: .leading)
-                Spacer(minLength: 0)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             }
+            // Match the inset of the value rows below so the columns line up.
+            .padding(.horizontal, 8)
 
             if selectedSensors.isEmpty && !showFanTargetHistory {
                 emptyState(
@@ -261,8 +261,6 @@ struct TempHistoryChartView: View {
                     inspectionColumn(for: .sensor(.gpu), in: inspectionPoints)
                     inspectionColumn(for: .sensor(.battery), in: inspectionPoints)
                     inspectionColumn(for: .fanTarget, in: inspectionPoints)
-                    
-                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
@@ -278,7 +276,6 @@ struct TempHistoryChartView: View {
                     periodRangeColumn(for: .sensor(.gpu), points: pointsBySeries[.sensor(.gpu)])
                     periodRangeColumn(for: .sensor(.battery), points: pointsBySeries[.sensor(.battery)])
                     periodRangeColumn(for: .fanTarget, points: pointsBySeries[.fanTarget])
-                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -409,6 +406,8 @@ struct TempHistoryChartView: View {
             Label(sensorName(sensor), systemImage: sensorIcon(sensor))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(sensorColor(sensor))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .toggleStyle(CheckboxToggleStyle())
         .help(L10n.format("Show %@ temperature in the graph", sensorName(sensor)))
@@ -419,6 +418,8 @@ struct TempHistoryChartView: View {
             Label("Fan target", systemImage: "fanblades")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.cyan)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .toggleStyle(CheckboxToggleStyle())
         .help(L10n.text("Show the highest requested fan speed as a percentage"))
@@ -452,6 +453,8 @@ struct TempHistoryChartView: View {
             .foregroundColor(.white)
         }
         .font(.system(size: 10, weight: .medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
     }
 
     private func inspectionColumn(for series: ChartSeries, in points: [ChartPoint]) -> some View {
@@ -462,7 +465,7 @@ struct TempHistoryChartView: View {
                 Color.clear
             }
         }
-        .frame(width: summaryColumnWidth, alignment: .leading)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     }
 
     private func periodRangeColumn(for series: ChartSeries, points: [ChartPoint]?) -> some View {
@@ -473,7 +476,7 @@ struct TempHistoryChartView: View {
                 Color.clear
             }
         }
-        .frame(width: summaryColumnWidth, alignment: .leading)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     }
 
     private func periodRange(series: ChartSeries, points: [ChartPoint]) -> some View {
@@ -489,6 +492,8 @@ struct TempHistoryChartView: View {
                 .foregroundColor(.white)
         }
         .font(.system(size: 9, weight: .medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
     }
 
     private func updateHoveredTime(
